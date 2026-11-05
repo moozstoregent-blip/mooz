@@ -1,0 +1,12 @@
+{
+  "name": "mooz",
+  "version": "0.1.0",
+  "description": "Mooz - cok saticili pazaryeri (MVP cekirdek). Sifir dis bagimlilik.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --experimental-sqlite server.js"
+  }
+}

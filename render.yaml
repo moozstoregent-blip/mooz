@@ -1,0 +1,12 @@
+# Render.com icin otomatik ayar dosyasi.
+# Render'da "New > Blueprint" ile bu repoyu secersen her seyi kendi ayarlar.
+services:
+  - type: web
+    name: mooz
+    runtime: node
+    plan: free
+    buildCommand: ""
+    startCommand: node --experimental-sqlite server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
