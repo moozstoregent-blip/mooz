@@ -152,7 +152,10 @@ add('GET', '/', (ctx) => {
 
   // Magaza alt alan adindaysak: sadece o magazanin kendi vitrini
   if (ctx.storeSite) {
-    let s2 = `SELECT p.*, c.slug AS cat_slug FROM products p
+    let s2 = `SELECT p.*, c.slug AS cat_slug,
+      (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) AS rating_count,
+      (SELECT COALESCE(AVG(rating),0) FROM reviews WHERE product_id = p.id) AS rating_avg
+      FROM products p
       LEFT JOIN categories c ON c.id = p.category_id WHERE p.store_id = ?`;
     const a2 = [ctx.storeSite.id];
     if (activeCat) { s2 += ' AND c.slug = ?'; a2.push(activeCat); }
@@ -163,7 +166,9 @@ add('GET', '/', (ctx) => {
     return ctx.send(pages.storeHome(ctx, { store: ctx.storeSite, products: prods, activeCat, q }));
   }
 
-  let sql = `SELECT p.*, s.name AS store_name, s.slug AS store_slug, c.slug AS cat_slug
+  let sql = `SELECT p.*, s.name AS store_name, s.slug AS store_slug, c.slug AS cat_slug,
+    (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) AS rating_count,
+    (SELECT COALESCE(AVG(rating),0) FROM reviews WHERE product_id = p.id) AS rating_avg
     FROM products p JOIN stores s ON s.id = p.store_id AND s.status='active'
     LEFT JOIN categories c ON c.id = p.category_id WHERE 1=1`;
   const args = [];
@@ -180,14 +185,39 @@ add('GET', '/product/:id', (ctx) => {
     FROM products p JOIN stores s ON s.id = p.store_id
     LEFT JOIN categories c ON c.id = p.category_id WHERE p.id = ?`).get(ctx.params.id);
   if (!p) { ctx.title = 'Bulunamadi'; return ctx.send(pages.notFound(ctx), 404); }
+  const agg = db.prepare('SELECT COUNT(*) AS n, COALESCE(AVG(rating),0) AS avg FROM reviews WHERE product_id = ?').get(p.id);
+  const reviews = db.prepare(`SELECT r.rating, r.comment, r.created_at, u.name AS user_name
+    FROM reviews r JOIN users u ON u.id = r.user_id
+    WHERE r.product_id = ? ORDER BY r.created_at DESC`).all(p.id);
+  const myReview = ctx.user
+    ? db.prepare('SELECT rating, comment FROM reviews WHERE product_id = ? AND user_id = ?').get(p.id, ctx.user.id)
+    : null;
   ctx.title = p.name;
-  ctx.send(pages.product(ctx, { p }));
+  ctx.send(pages.product(ctx, { p, agg, reviews, myReview }));
+});
+
+// Yorum / puan ekle (giris yapan herkes, urun basina 1 yorum)
+add('POST', '/product/:id/review', (ctx) => {
+  if (!requireLogin(ctx)) return;
+  const prod = db.prepare('SELECT id FROM products WHERE id = ?').get(ctx.params.id);
+  if (!prod) { ctx.flashMsg('Urun bulunamadi.'); return ctx.redirect('/'); }
+  let rating = parseInt(ctx.body.rating, 10);
+  if (!(rating >= 1 && rating <= 5)) { ctx.flashMsg('Lutfen 1-5 arasi puan sec.'); return ctx.redirect('/product/' + prod.id); }
+  const comment = (ctx.body.comment || '').trim().slice(0, 1000);
+  db.prepare(`INSERT INTO reviews (product_id, user_id, rating, comment) VALUES (?,?,?,?)
+    ON CONFLICT(product_id, user_id) DO UPDATE SET rating = excluded.rating, comment = excluded.comment, created_at = datetime('now')`)
+    .run(prod.id, ctx.user.id, rating, comment);
+  ctx.flashMsg('Yorumun eklendi, tesekkurler!');
+  ctx.redirect('/product/' + prod.id);
 });
 
 add('GET', '/store/:slug', (ctx) => {
   const store = db.prepare("SELECT * FROM stores WHERE slug = ? AND status='active'").get(ctx.params.slug);
   if (!store) { ctx.title = 'Magaza bulunamadi'; return ctx.send(pages.notFound(ctx), 404); }
-  const products = db.prepare('SELECT * FROM products WHERE store_id = ? ORDER BY created_at DESC').all(store.id);
+  const products = db.prepare(`SELECT p.*,
+    (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) AS rating_count,
+    (SELECT COALESCE(AVG(rating),0) FROM reviews WHERE product_id = p.id) AS rating_avg
+    FROM products p WHERE p.store_id = ? ORDER BY p.created_at DESC`).all(store.id);
   ctx.title = store.name;
   ctx.send(pages.store(ctx, { store, products }));
 });
