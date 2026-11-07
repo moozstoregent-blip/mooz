@@ -60,6 +60,11 @@ function buildCtx(req, res) {
     ? new Set(db.prepare('SELECT product_id FROM favorites WHERE user_id = ?').all(user.id).map(r => r.product_id))
     : new Set();
 
+  // Satici icin okunmamis (yeni) siparis sayisi
+  const newOrders = (user && user.role === 'seller' && myStore)
+    ? db.prepare("SELECT COUNT(*) AS n FROM seller_orders WHERE store_id = ? AND seen = 0").get(myStore.id).n
+    : 0;
+
   const lang = config.languages.includes(cookies.mooz_lang) ? cookies.mooz_lang : config.defaultLang;
   const displayCur = config.currencies.includes(cookies.mooz_cur) ? cookies.mooz_cur : config.defaultCurrency;
 
@@ -80,6 +85,7 @@ function buildCtx(req, res) {
     categories: allCategories(),
     favSet,
     favCount: favSet.size,
+    newOrders,
     couponCode,
     hasPerm: (key) => hasPerm(user, key),
     params: {}, query: {}, body: {},
@@ -655,8 +661,11 @@ add('GET', '/seller/orders', (ctx) => {
     FROM seller_orders so JOIN orders o ON o.id=so.order_id JOIN users u ON u.id=o.buyer_id
     WHERE so.store_id=? ORDER BY so.created_at DESC`).all(ctx.myStore.id);
   sellerOrders.forEach(so => { so.items = db.prepare('SELECT * FROM order_items WHERE seller_order_id=?').all(so.id); });
+  const newCount = ctx.newOrders;
+  // Goruldu olarak isaretle (bu sayfayi acinca bildirim sifirlanir)
+  db.prepare("UPDATE seller_orders SET seen = 1 WHERE store_id = ? AND seen = 0").run(ctx.myStore.id);
   ctx.title = 'Gelen Siparisler';
-  ctx.send(pages.sellerOrders(ctx, { sellerOrders }));
+  ctx.send(pages.sellerOrders(ctx, { sellerOrders, newCount }));
 });
 
 add('POST', '/seller/orders/:id/status', (ctx) => {
