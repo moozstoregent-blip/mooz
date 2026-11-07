@@ -80,12 +80,29 @@ function thumb(p) {
     : (p.emoji || '');
 }
 
+// Yildiz gosterimi (ortalama puan). count verilirse yanina adet yazar.
+function stars(avg, count) {
+  const a = Math.round((avg || 0) * 2) / 2; // 0.5 adimli
+  let s = '';
+  for (let i = 1; i <= 5; i++) {
+    if (a >= i) s += '<span class="st full">★</span>';
+    else if (a >= i - 0.5) s += '<span class="st half">★</span>';
+    else s += '<span class="st">★</span>';
+  }
+  const label = (count === undefined) ? '' :
+    (count > 0 ? `<span class="rcount">${(avg).toFixed(1)} (${count})</span>` : `<span class="rcount muted">Henuz yorum yok</span>`);
+  return `<span class="stars">${s}${label}</span>`;
+}
+
 function productCard(ctx, p, showSeller) {
+  const rating = (p.rating_count !== undefined)
+    ? `<div class="card-rating">${stars(p.rating_avg || 0, p.rating_count)}</div>` : '';
   return `<div class="card">
     <a href="/product/${p.id}" class="thumb">${thumb(p)}${showSeller ? `<span class="seller-tag">\u{1F3EA} ${esc(p.store_name)}</span>` : ''}</a>
     <div class="cbody">
       <h3><a href="/product/${p.id}">${esc(p.name)}</a></h3>
       ${showSeller ? `<a class="store-link" href="/store/${esc(p.store_slug)}">${esc(p.store_name)}</a>` : ''}
+      ${rating}
       <div class="price">${ctx.price(p.price_cents, p.currency)}</div>
       ${p.stock > 0
         ? `<form action="/cart/add" method="post"><input type="hidden" name="product_id" value="${p.id}"><button class="addbtn" type="submit">${esc(ctx.t('add_to_cart'))}</button></form>`
@@ -125,8 +142,40 @@ const pages = {
       ${grid}`);
   },
 
-  product(ctx, { p }) {
+  product(ctx, { p, agg, reviews, myReview }) {
     const t = ctx.t;
+    const avg = agg ? agg.avg : 0, count = agg ? agg.n : 0;
+
+    // Yorum listesi
+    const reviewList = (reviews && reviews.length)
+      ? reviews.map(r => `
+          <div class="review">
+            <div class="rv-head">
+              <span class="rv-name">${esc(r.user_name)}</span>
+              ${stars(r.rating)}
+              <span class="muted small">${esc((r.created_at || '').slice(0, 10))}</span>
+            </div>
+            ${r.comment ? `<p class="rv-text">${esc(r.comment)}</p>` : ''}
+          </div>`).join('')
+      : `<p class="empty">Henuz yorum yok. Ilk yorumu sen yap!</p>`;
+
+    // Yorum formu (giris yapmis kullanici)
+    let reviewForm;
+    if (!ctx.user) {
+      reviewForm = `<p class="muted">Yorum yapmak icin <a href="/login">giris yap</a>.</p>`;
+    } else {
+      const cur = myReview ? myReview.rating : 0;
+      const radios = [5, 4, 3, 2, 1].map(n =>
+        `<input type="radio" id="star${n}" name="rating" value="${n}"${cur === n ? ' checked' : ''}><label for="star${n}" title="${n} yildiz">★</label>`
+      ).join('');
+      reviewForm = `
+        <form action="/product/${p.id}/review" method="post" class="review-form">
+          <div class="star-input">${radios}</div>
+          <textarea name="comment" rows="3" placeholder="Urun hakkinda ne dusunuyorsun? (istege bagli)">${myReview ? esc(myReview.comment) : ''}</textarea>
+          <button class="btn btn-brand" type="submit">${myReview ? 'Yorumu guncelle' : 'Yorum gonder'}</button>
+        </form>`;
+    }
+
     return layout(ctx, `
       <a class="back" href="/">&larr; ${esc(t('back_store'))}</a>
       <div class="product-detail">
@@ -135,6 +184,7 @@ const pages = {
           ${p.cat_name ? `<span class="chip">${esc(p.cat_name)}</span>` : ''}
           <h1>${esc(p.name)}</h1>
           <a class="store-link" href="/store/${esc(p.store_slug)}">\u{1F3EA} ${esc(p.store_name)}</a>
+          <div class="pd-rating">${stars(avg, count)}</div>
           <div class="pd-price">${ctx.price(p.price_cents, p.currency)}</div>
           <p class="pd-desc">${p.description ? esc(p.description) : esc(t('no_desc'))}</p>
           <p class="muted small">${esc(t('stock'))}: ${p.stock}</p>
@@ -142,6 +192,12 @@ const pages = {
             ? `<form action="/cart/add" method="post"><input type="hidden" name="product_id" value="${p.id}"><button class="btn btn-brand big" type="submit">${esc(t('add_to_cart'))}</button></form>`
             : `<button class="btn btn-brand big" disabled>${esc(t('soldout'))}</button>`}
         </div>
+      </div>
+
+      <div class="reviews-section">
+        <div class="sect-h"><h2>Degerlendirmeler ${count ? `(${count})` : ''}</h2></div>
+        <div class="review-box">${reviewForm}</div>
+        <div class="review-list">${reviewList}</div>
       </div>`);
   },
 
