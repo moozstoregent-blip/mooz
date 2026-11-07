@@ -35,7 +35,7 @@ function layout(ctx, body) {
       <a class="btn btn-ghost" href="/favorites">&#x2665; Favorilerim${ctx.favCount ? ' (' + ctx.favCount + ')' : ''}</a>
       <a class="btn btn-ghost" href="/orders">${esc(t('orders'))}</a>
       <a class="btn btn-brand" href="/cart">${esc(t('cart'))}${ctx.cartCount ? ' (' + ctx.cartCount + ')' : ''}</a>
-      ${user.role === 'seller' ? `<a class="btn btn-ghost" href="/seller">${esc(t('seller_panel'))}</a>` : ''}
+      ${user.role === 'seller' ? `<a class="btn btn-ghost nav-badge-wrap" href="/seller">${esc(t('seller_panel'))}${ctx.newOrders ? `<span class="nav-badge">${ctx.newOrders}</span>` : ''}</a>` : ''}
       ${user.role === 'admin' ? `<a class="btn btn-ghost" href="/admin">${esc(t('admin'))}</a>` : ''}
       <span class="hi">${esc(user.name)}</span>
       <form action="/logout" method="post" style="display:inline"><button class="btn btn-ghost" type="submit">${esc(t('logout'))}</button></form>`;
@@ -339,14 +339,15 @@ const pages = {
         <a class="btn btn-brand" href="/seller/products/new">+ Yeni Urun</a>
       </div>
       ${notice}
+      ${ctx.newOrders ? `<div class="notice neworder">\u{1F514} <strong>${ctx.newOrders} yeni siparisin</strong> var! <a href="/seller/orders">Siparisleri gor &rarr;</a></div>` : ''}
       ${store ? `<div class="stat-row">
         <div class="stat"><div class="n">${productCount}</div><div class="l">Urunum</div></div>
+        <div class="stat${ctx.newOrders ? ' hot' : ''}"><div class="n">${ctx.newOrders}</div><div class="l">Yeni siparis</div></div>
         <div class="stat"><div class="n">${statusTxt}</div><div class="l">Durum</div></div>
-        <div class="stat"><div class="n">${esc(store.slug)}</div><div class="l">Magaza adresi</div></div>
       </div>
       <div class="panel-links">
         <a class="btn btn-ghost" href="/seller/products">Urunlerimi yonet</a>
-        <a class="btn btn-ghost" href="/seller/orders">Gelen Siparisler</a>
+        <a class="btn btn-ghost nav-badge-wrap" href="/seller/orders">Gelen Siparisler${ctx.newOrders ? `<span class="nav-badge">${ctx.newOrders}</span>` : ''}</a>
         ${store.status === 'active' ? `<a class="btn btn-ghost" href="/store/${esc(store.slug)}">Vitrinimi gor</a>` : ''}
       </div>
       ${store.status === 'active' ? `
@@ -689,7 +690,7 @@ const pages = {
       <div class="cart-summary"><div class="totrow big"><span>${esc(t('grand_total'))}</span><span>${ctx.price(order.total_cents, order.currency)}</span></div></div>`);
   },
 
-  sellerOrders(ctx, { sellerOrders }) {
+  sellerOrders(ctx, { sellerOrders, newCount }) {
     if (!sellerOrders.length) return layout(ctx, `
       <div class="panel-head seller"><div><h1>Gelen Siparisler</h1><p class="muted">Henuz siparis yok.</p></div></div>
       <p class="empty">Magazana siparis geldiginde burada gorunecek.</p>`);
@@ -697,8 +698,8 @@ const pages = {
       const items = so.items.map(it => `<div class="sum-line"><span>${esc(it.name)} × ${it.qty}</span><span>${money(it.price_cents * it.qty, it.currency)}</span></div>`).join('');
       const net = so.subtotal_cents - so.commission_cents;
       const btn = (val, label) => `<form action="/seller/orders/${so.id}/status" method="post" style="display:inline"><input type="hidden" name="status" value="${val}"><button class="btn btn-ghost" type="submit"${so.status === val ? ' disabled' : ''}>${label}</button></form>`;
-      return `<div class="order-seller">
-        <div class="os-head"><strong>Siparis #${so.order_id}</strong> ${soBadge(ctx.t, so.status)} <span class="muted small">${esc((so.order_date || '').slice(0, 16))} &middot; ${esc(so.buyer_name)}</span></div>
+      return `<div class="order-seller${so.seen ? '' : ' is-new'}">
+        <div class="os-head"><strong>Siparis #${so.order_id}</strong> ${so.seen ? '' : '<span class="badge new">YENI</span>'} ${soBadge(ctx.t, so.status)} <span class="muted small">${esc((so.order_date || '').slice(0, 16))} &middot; ${esc(so.buyer_name)}</span></div>
         <div class="muted small">Teslimat: ${esc(so.address || '-')}</div>
         ${items}
         <div class="sum-line"><span>Ara toplam</span><span>${money(so.subtotal_cents, so.currency)}</span></div>
@@ -715,7 +716,7 @@ const pages = {
       </div>`;
     }).join('');
     return layout(ctx, `
-      <div class="panel-head seller"><div><h1>Gelen Siparisler</h1><p class="muted">${sellerOrders.length} siparis</p></div></div>
+      <div class="panel-head seller"><div><h1>Gelen Siparisler</h1><p class="muted">${sellerOrders.length} siparis${newCount ? ` &middot; ${newCount} yeni` : ''}</p></div></div>
       ${cards}`);
   },
 
