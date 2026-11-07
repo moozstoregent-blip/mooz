@@ -75,7 +75,7 @@ ${flash ? `<div class="flash">${esc(flash)}</div>` : ''}
 
 // Urun gorseli: link varsa resim, yoksa emoji
 function thumb(p) {
-  return (p.image_url && /^https?:\/\//i.test(p.image_url))
+  return (p.image_url && /^(https?:\/\/|data:image\/)/i.test(p.image_url))
     ? `<img class="pimg" src="${esc(p.image_url)}" alt="${esc(p.name)}">`
     : (p.emoji || '');
 }
@@ -338,7 +338,7 @@ const pages = {
       <a class="back" href="/seller/products">&larr; Urunlerim</a>
       <div class="auth-card wide">
         <h1>Yeni Urun Ekle</h1>
-        <form action="/seller/products" method="post">
+        <form action="/seller/products" method="post" enctype="multipart/form-data">
           <label>Urun adi *</label><input type="text" name="name" required placeholder="Orn: Pamuklu Tisort">
           <label>Kategori</label>
           <select name="category_id"><option value="">Secin...</option>
@@ -349,10 +349,13 @@ const pages = {
             <div><label>Para birimi</label><select name="currency"><option value="EUR">EUR (&euro;)</option><option value="TRY">TRY (&#8378;)</option></select></div>
             <div><label>Stok</label><input type="number" name="stock" value="1" min="0"></div>
           </div>
-          <label>Gorsel linki (URL) - istege bagli</label>
+          <label>Gorsel - bilgisayardan foto yukle (istege bagli)</label>
+          <input type="file" name="image_file" accept="image/png,image/jpeg,image/webp,image/gif">
+          <p class="muted small" style="margin:4px 0 0">PNG/JPG/WEBP, en fazla ~3 MB. Foto yuklersen o kullanilir.</p>
+          <label>veya Gorsel linki (URL)</label>
           <input type="url" name="image_url" placeholder="https://.../resim.jpg">
-          <p class="muted small" style="margin:4px 0 0">Resim linki verirsen urun fotografi gorunur; vermezsen asagidaki emoji kullanilir.</p>
-          <label>Gorsel (emoji - link yoksa)</label>
+          <p class="muted small" style="margin:4px 0 0">Ne foto ne link verirsen asagidaki emoji kullanilir.</p>
+          <label>Gorsel (emoji - foto/link yoksa)</label>
           <input type="text" name="emoji" value="&#x1F4E6;" maxlength="4" style="width:90px;text-align:center;font-size:20px">
           <label>Aciklama</label><textarea name="description" rows="3" placeholder="Kisa urun aciklamasi"></textarea>
           <button class="btn btn-brand big" type="submit">Urunu Yayinla</button>
