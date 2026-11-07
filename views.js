@@ -32,6 +32,7 @@ function layout(ctx, body) {
   let right;
   if (user) {
     right = `
+      <a class="btn btn-ghost" href="/favorites">&#x2665; Favorilerim${ctx.favCount ? ' (' + ctx.favCount + ')' : ''}</a>
       <a class="btn btn-ghost" href="/orders">${esc(t('orders'))}</a>
       <a class="btn btn-brand" href="/cart">${esc(t('cart'))}${ctx.cartCount ? ' (' + ctx.cartCount + ')' : ''}</a>
       ${user.role === 'seller' ? `<a class="btn btn-ghost" href="/seller">${esc(t('seller_panel'))}</a>` : ''}
@@ -94,11 +95,22 @@ function stars(avg, count) {
   return `<span class="stars">${s}${label}</span>`;
 }
 
+// Kalp (favori) butonu
+function favBtn(ctx, pid, cls) {
+  const on = ctx.favSet && ctx.favSet.has(pid);
+  return `<form action="/favorites/toggle" method="post" class="fav-form ${cls || ''}">
+    <input type="hidden" name="product_id" value="${pid}">
+    <input type="hidden" name="back" value="${esc(ctx.path)}">
+    <button type="submit" class="fav-btn${on ? ' on' : ''}" title="${on ? 'Favorilerden cikar' : 'Favorilere ekle'}" aria-label="favori">${on ? '♥' : '♡'}</button>
+  </form>`;
+}
+
 function productCard(ctx, p, showSeller) {
   const rating = (p.rating_count !== undefined)
     ? `<div class="card-rating">${stars(p.rating_avg || 0, p.rating_count)}</div>` : '';
   return `<div class="card">
     <a href="/product/${p.id}" class="thumb">${thumb(p)}${showSeller ? `<span class="seller-tag">\u{1F3EA} ${esc(p.store_name)}</span>` : ''}</a>
+    ${favBtn(ctx, p.id, 'on-card')}
     <div class="cbody">
       <h3><a href="/product/${p.id}">${esc(p.name)}</a></h3>
       ${showSeller ? `<a class="store-link" href="/store/${esc(p.store_slug)}">${esc(p.store_name)}</a>` : ''}
@@ -139,6 +151,15 @@ const pages = {
       : `<p class="empty">${esc(t('empty_products'))}</p>`;
     return layout(ctx, `${hero}
       <div class="sect-h"><h2>${heading}</h2><span class="muted">${products.length} ${esc(t('n_products'))}</span></div>
+      ${grid}`);
+  },
+
+  favorites(ctx, { products }) {
+    const grid = products.length
+      ? `<div class="grid">${products.map(p => productCard(ctx, p, true)).join('')}</div>`
+      : `<p class="empty">Henuz favori urunun yok. Begendigin urunlerdeki ♡ kalbe basarak ekleyebilirsin. <a href="/">Urunlere goz at &rarr;</a></p>`;
+    return layout(ctx, `
+      <div class="sect-h"><h2>♥ Favorilerim</h2><span class="muted">${products.length} urun</span></div>
       ${grid}`);
   },
 
@@ -184,7 +205,7 @@ const pages = {
           ${p.cat_name ? `<span class="chip">${esc(p.cat_name)}</span>` : ''}
           <h1>${esc(p.name)}</h1>
           <a class="store-link" href="/store/${esc(p.store_slug)}">\u{1F3EA} ${esc(p.store_name)}</a>
-          <div class="pd-rating">${stars(avg, count)}</div>
+          <div class="pd-rating">${stars(avg, count)} ${favBtn(ctx, p.id, 'inline')}</div>
           <div class="pd-price">${ctx.price(p.price_cents, p.currency)}</div>
           <p class="pd-desc">${p.description ? esc(p.description) : esc(t('no_desc'))}</p>
           <p class="muted small">${esc(t('stock'))}: ${p.stock}</p>
