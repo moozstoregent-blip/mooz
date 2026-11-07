@@ -304,21 +304,46 @@ const pages = {
       </div>`);
   },
 
-  adminDashboard(ctx, { stores, stats }) {
-    const rows = stores.map(s => {
-      const badge = s.status === 'active' ? '<span class="badge ok">Aktif</span>'
-        : s.status === 'pending' ? '<span class="badge warn">Onayda</span>'
-        : '<span class="badge off">Askida</span>';
-      const actions = `${s.status !== 'active' ? `<form action="/admin/stores/${s.id}/approve" method="post"><button class="link-ok" type="submit">Onayla</button></form>` : ''}${s.status === 'active' ? `<form action="/admin/stores/${s.id}/suspend" method="post"><button class="link-danger" type="submit">Askiya al</button></form>` : ''}`;
-      return `<tr>
-        <td><strong>${esc(s.name)}</strong><br><span class="muted small">/store/${esc(s.slug)}</span></td>
-        <td class="small">${esc(s.owner_email)}</td>
-        <td>${s.product_count}</td>
-        <td>${badge}</td>
-        <td class="actions">${actions}</td></tr>`;
-    }).join('');
+  adminDashboard(ctx, { stores, stats, finance }) {
+    // Yetkiye gore bolum erisim linkleri
+    const navLinks = [];
+    if (ctx.hasPerm('staff')) navLinks.push('<a class="btn btn-light" href="/admin/staff">Personel yonetimi</a>');
+    const navBar = navLinks.length ? `<div class="admin-nav">${navLinks.join('')}</div>` : '';
+
+    // Finans ozeti (sadece finance yetkisi)
+    const financeBox = finance ? `
+      <div class="sect-h"><h2>Finans ozeti</h2></div>
+      <div class="stat-row">
+        <div class="stat"><div class="n">${money(finance.sales, 'EUR')}</div><div class="l">Toplam ciro</div></div>
+        <div class="stat"><div class="n">${money(finance.commission, 'EUR')}</div><div class="l">Komisyon geliri</div></div>
+        <div class="stat"><div class="n">${money(finance.payout, 'EUR')}</div><div class="l">Saticilara odenecek</div></div>
+      </div>` : '';
+
+    // Magazalar (sadece sellers yetkisi)
+    let storeBox = '';
+    if (stores) {
+      const rows = stores.map(s => {
+        const badge = s.status === 'active' ? '<span class="badge ok">Aktif</span>'
+          : s.status === 'pending' ? '<span class="badge warn">Onayda</span>'
+          : '<span class="badge off">Askida</span>';
+        const actions = `${s.status !== 'active' ? `<form action="/admin/stores/${s.id}/approve" method="post"><button class="link-ok" type="submit">Onayla</button></form>` : ''}${s.status === 'active' ? `<form action="/admin/stores/${s.id}/suspend" method="post"><button class="link-danger" type="submit">Askiya al</button></form>` : ''}`;
+        return `<tr>
+          <td><strong>${esc(s.name)}</strong><br><span class="muted small">/store/${esc(s.slug)}</span></td>
+          <td class="small">${esc(s.owner_email)}</td>
+          <td>${s.product_count}</td>
+          <td>${badge}</td>
+          <td class="actions">${actions}</td></tr>`;
+      }).join('');
+      storeBox = `
+        <div class="sect-h"><h2>Magazalar</h2></div>
+        <div class="table-wrap"><table class="ptable">
+          <thead><tr><th>Magaza</th><th>Sahip</th><th>Urun</th><th>Durum</th><th>Islem</th></tr></thead>
+          <tbody>${rows}</tbody></table></div>`;
+    }
+
     return layout(ctx, `
       <div class="panel-head admin"><div><h1>Admin Paneli</h1><p class="muted">Platformu buradan yonet.</p></div></div>
+      ${navBar}
       <div class="stat-row">
         <div class="stat"><div class="n">${stats.stores}</div><div class="l">Magaza</div></div>
         <div class="stat"><div class="n">${stats.sellers}</div><div class="l">Satici</div></div>
@@ -327,9 +352,53 @@ const pages = {
         <div class="stat"><div class="n">${stats.orders}</div><div class="l">Siparis</div></div>
         <div class="stat"><div class="n">${money(stats.commission, 'EUR')}</div><div class="l">Komisyon geliri</div></div>
       </div>
-      <div class="sect-h"><h2>Magazalar</h2></div>
+      ${financeBox}
+      ${storeBox}`);
+  },
+
+  adminStaff(ctx, { staff, perms }) {
+    const checkboxes = (prefix, current) => perms.map(([key, label]) => {
+      const on = current === '*' || (',' + (current || '') + ',').includes(',' + key + ',');
+      const dis = current === '*' ? ' disabled' : '';
+      return `<label class="perm-chk"><input type="checkbox" name="${prefix}${key}"${on ? ' checked' : ''}${dis}> ${esc(label)}</label>`;
+    }).join('');
+
+    const rows = staff.map(u => {
+      const owner = u.email === 'admin@mooz.store';
+      const permText = u.permissions === '*' ? '<span class="badge ok">Tum yetkiler (sahip)</span>'
+        : (u.permissions ? u.permissions.split(',').filter(Boolean).map(k => {
+            const p = perms.find(x => x[0] === k); return p ? esc(p[1]) : esc(k);
+          }).join(', ') : '<span class="muted">yetki yok</span>');
+      const editForm = owner ? '<span class="muted small">Ana sahip — degistirilemez</span>' : `
+        <form action="/admin/staff/${u.id}/perms" method="post" class="perm-form">
+          <div class="perm-grid">${checkboxes('perm_', u.permissions)}</div>
+          <button class="btn btn-light small" type="submit">Kaydet</button>
+        </form>
+        <form action="/admin/staff/${u.id}/delete" method="post" onsubmit="return confirm('Bu personel silinsin mi?')">
+          <button class="link-danger" type="submit">Sil</button>
+        </form>`;
+      return `<tr>
+        <td><strong>${esc(u.name)}</strong><br><span class="muted small">${esc(u.email)}</span></td>
+        <td>${permText}</td>
+        <td class="actions">${editForm}</td></tr>`;
+    }).join('');
+
+    return layout(ctx, `
+      <div class="panel-head admin"><div><h1>Personel Yonetimi</h1><p class="muted">Ekibine sinirli yetkili admin hesaplari ac.</p></div>
+        <a class="btn btn-light" href="/admin">&larr; Admin paneli</a></div>
+
+      <div class="sect-h"><h2>Yeni personel ekle</h2></div>
+      <form action="/admin/staff" method="post" class="form-card">
+        <label>Ad Soyad<input name="name" required></label>
+        <label>E-posta<input name="email" type="email" required></label>
+        <label>Sifre (en az 6 karakter)<input name="password" type="password" minlength="6" required></label>
+        <div class="field"><span class="flabel">Yetkiler</span><div class="perm-grid">${checkboxes('perm_', '')}</div></div>
+        <button class="btn btn-brand" type="submit">Personel ekle</button>
+      </form>
+
+      <div class="sect-h"><h2>Personel listesi</h2></div>
       <div class="table-wrap"><table class="ptable">
-        <thead><tr><th>Magaza</th><th>Sahip</th><th>Urun</th><th>Durum</th><th>Islem</th></tr></thead>
+        <thead><tr><th>Kisi</th><th>Yetkiler</th><th>Duzenle</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`);
   },
 
