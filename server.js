@@ -54,6 +54,11 @@ function buildCtx(req, res) {
     ? db.prepare('SELECT COALESCE(SUM(qty),0) AS n FROM cart_items WHERE user_id = ?').get(user.id).n
     : 0;
 
+  // Kullanicinin favori urun id'leri (kalp dolu/bos icin)
+  const favSet = user
+    ? new Set(db.prepare('SELECT product_id FROM favorites WHERE user_id = ?').all(user.id).map(r => r.product_id))
+    : new Set();
+
   const lang = config.languages.includes(cookies.mooz_lang) ? cookies.mooz_lang : config.defaultLang;
   const displayCur = config.currencies.includes(cookies.mooz_cur) ? cookies.mooz_cur : config.defaultCurrency;
 
@@ -72,6 +77,8 @@ function buildCtx(req, res) {
     t: (key) => i18n.t(lang, key),
     price: (cents, cur) => H.money(H.convert(cents, cur || config.defaultCurrency, displayCur), displayCur),
     categories: allCategories(),
+    favSet,
+    favCount: favSet.size,
     hasPerm: (key) => hasPerm(user, key),
     params: {}, query: {}, body: {},
     path: req.url.split('?')[0],
@@ -209,6 +216,37 @@ add('POST', '/product/:id/review', (ctx) => {
     .run(prod.id, ctx.user.id, rating, comment);
   ctx.flashMsg('Yorumun eklendi, tesekkurler!');
   ctx.redirect('/product/' + prod.id);
+});
+
+// --- Favoriler / istek listesi ---
+add('POST', '/favorites/toggle', (ctx) => {
+  if (!requireLogin(ctx)) return;
+  const pid = parseInt(ctx.body.product_id, 10);
+  const back = (ctx.body.back && ctx.body.back.startsWith('/')) ? ctx.body.back : '/';
+  const prod = db.prepare('SELECT id FROM products WHERE id = ?').get(pid);
+  if (!prod) { ctx.flashMsg('Urun bulunamadi.'); return ctx.redirect(back); }
+  const exists = db.prepare('SELECT id FROM favorites WHERE user_id = ? AND product_id = ?').get(ctx.user.id, pid);
+  if (exists) {
+    db.prepare('DELETE FROM favorites WHERE id = ?').run(exists.id);
+    ctx.flashMsg('Favorilerden cikarildi.');
+  } else {
+    db.prepare('INSERT INTO favorites (user_id, product_id) VALUES (?,?)').run(ctx.user.id, pid);
+    ctx.flashMsg('Favorilere eklendi.');
+  }
+  ctx.redirect(back);
+});
+
+add('GET', '/favorites', (ctx) => {
+  if (!requireLogin(ctx)) return;
+  const products = db.prepare(`SELECT p.*, s.name AS store_name, s.slug AS store_slug,
+    (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) AS rating_count,
+    (SELECT COALESCE(AVG(rating),0) FROM reviews WHERE product_id = p.id) AS rating_avg
+    FROM favorites f
+    JOIN products p ON p.id = f.product_id
+    JOIN stores s ON s.id = p.store_id AND s.status='active'
+    WHERE f.user_id = ? ORDER BY f.created_at DESC`).all(ctx.user.id);
+  ctx.title = 'Favorilerim';
+  ctx.send(pages.favorites(ctx, { products }));
 });
 
 add('GET', '/store/:slug', (ctx) => {
