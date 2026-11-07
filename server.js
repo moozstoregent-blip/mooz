@@ -49,6 +49,7 @@ function buildCtx(req, res) {
   const flash = cookies.mooz_flash || null;
   const outCookies = [];
   if (flash) outCookies.push('mooz_flash=; Path=/; Max-Age=0');
+  const couponCode = cookies.mooz_coupon || '';
 
   const cartCount = user
     ? db.prepare('SELECT COALESCE(SUM(qty),0) AS n FROM cart_items WHERE user_id = ?').get(user.id).n
@@ -79,6 +80,7 @@ function buildCtx(req, res) {
     categories: allCategories(),
     favSet,
     favCount: favSet.size,
+    couponCode,
     hasPerm: (key) => hasPerm(user, key),
     params: {}, query: {}, body: {},
     path: req.url.split('?')[0],
@@ -130,6 +132,12 @@ function requirePerm(ctx, key) {
     return false;
   }
   return true;
+}
+
+// Gecerli (aktif) kupon dondur, yoksa null
+function getCoupon(code) {
+  if (!code) return null;
+  return db.prepare("SELECT * FROM coupons WHERE code = ? AND active = 1").get(String(code).trim().toUpperCase()) || null;
 }
 
 function requireLogin(ctx) {
@@ -461,6 +469,40 @@ add('POST', '/admin/staff/:id/perms', (ctx) => {
   ctx.redirect('/admin/staff');
 });
 
+// --- Kupon yonetimi (marketing yetkisi) ---
+add('GET', '/admin/coupons', (ctx) => {
+  if (!requirePerm(ctx, 'marketing')) return;
+  const coupons = db.prepare('SELECT * FROM coupons ORDER BY id DESC').all();
+  ctx.title = 'Kuponlar';
+  ctx.send(pages.adminCoupons(ctx, { coupons }));
+});
+
+add('POST', '/admin/coupons', (ctx) => {
+  if (!requirePerm(ctx, 'marketing')) return;
+  const code = String(ctx.body.code || '').trim().toUpperCase().replace(/\s+/g, '');
+  const percent = parseInt(ctx.body.percent, 10);
+  if (!/^[A-Z0-9]{3,20}$/.test(code)) { ctx.flashMsg('Kod 3-20 karakter, sadece harf/rakam olmali.'); return ctx.redirect('/admin/coupons'); }
+  if (!(percent >= 1 && percent <= 90)) { ctx.flashMsg('Indirim yuzdesi 1-90 arasi olmali.'); return ctx.redirect('/admin/coupons'); }
+  if (db.prepare('SELECT id FROM coupons WHERE code = ?').get(code)) { ctx.flashMsg('Bu kod zaten var.'); return ctx.redirect('/admin/coupons'); }
+  db.prepare('INSERT INTO coupons (code,percent,active) VALUES (?,?,1)').run(code, percent);
+  ctx.flashMsg('Kupon olusturuldu: ' + code + ' (%' + percent + ')');
+  ctx.redirect('/admin/coupons');
+});
+
+add('POST', '/admin/coupons/:id/toggle', (ctx) => {
+  if (!requirePerm(ctx, 'marketing')) return;
+  const c = db.prepare('SELECT * FROM coupons WHERE id = ?').get(ctx.params.id);
+  if (c) db.prepare('UPDATE coupons SET active = ? WHERE id = ?').run(c.active ? 0 : 1, c.id);
+  ctx.redirect('/admin/coupons');
+});
+
+add('POST', '/admin/coupons/:id/delete', (ctx) => {
+  if (!requirePerm(ctx, 'marketing')) return;
+  db.prepare('DELETE FROM coupons WHERE id = ?').run(ctx.params.id);
+  ctx.flashMsg('Kupon silindi.');
+  ctx.redirect('/admin/coupons');
+});
+
 add('POST', '/admin/staff/:id/delete', (ctx) => {
   if (!requirePerm(ctx, 'staff')) return;
   const target = db.prepare("SELECT id,email FROM users WHERE id=? AND role='admin'").get(ctx.params.id);
@@ -490,7 +532,7 @@ add('POST', '/cart/add', (ctx) => {
 add('GET', '/cart', (ctx) => {
   if (!requireLogin(ctx)) return;
   ctx.title = 'Sepetim';
-  ctx.send(pages.cart(ctx, { rows: cartRows(ctx.user.id) }));
+  ctx.send(pages.cart(ctx, { rows: cartRows(ctx.user.id), coupon: getCoupon(ctx.couponCode) }));
 });
 
 add('POST', '/cart/update', (ctx) => {
@@ -507,12 +549,28 @@ add('POST', '/cart/remove', (ctx) => {
   ctx.redirect('/cart');
 });
 
+add('POST', '/cart/coupon', (ctx) => {
+  if (!requireLogin(ctx)) return;
+  const code = String(ctx.body.code || '').trim().toUpperCase();
+  const c = getCoupon(code);
+  if (!c) { ctx.flashMsg('Gecersiz veya pasif kupon kodu.'); ctx.setCookie('mooz_coupon=; Path=/; Max-Age=0'); }
+  else { ctx.setCookie('mooz_coupon=' + encodeURIComponent(code) + '; Path=/; Max-Age=86400'); ctx.flashMsg('Kupon uygulandi: %' + c.percent + ' indirim'); }
+  ctx.redirect('/cart');
+});
+
+add('POST', '/cart/coupon/remove', (ctx) => {
+  if (!requireLogin(ctx)) return;
+  ctx.setCookie('mooz_coupon=; Path=/; Max-Age=0');
+  ctx.flashMsg('Kupon kaldirildi.');
+  ctx.redirect('/cart');
+});
+
 add('GET', '/checkout', (ctx) => {
   if (!requireLogin(ctx)) return;
   const rows = cartRows(ctx.user.id);
   if (!rows.length) { ctx.flashMsg('Sepetin bos.'); return ctx.redirect('/cart'); }
   ctx.title = 'Odeme';
-  ctx.send(pages.checkout(ctx, { rows }));
+  ctx.send(pages.checkout(ctx, { rows, coupon: getCoupon(ctx.couponCode) }));
 });
 
 add('POST', '/checkout', (ctx) => {
@@ -531,7 +589,13 @@ add('POST', '/checkout', (ctx) => {
   if (!usable.length) { ctx.flashMsg('Sepetindeki urunler tukenmis.'); return ctx.redirect('/cart'); }
 
   const orderCurrency = usable[0].currency; // MVP: baskin para birimi (demo verisi EUR)
-  const orderTotal = usable.reduce((s, it) => s + it.price_cents * it.qty, 0);
+  const grossTotal = usable.reduce((s, it) => s + it.price_cents * it.qty, 0);
+
+  // Kupon indirimi (yuzde)
+  const coupon = getCoupon(ctx.couponCode);
+  const percent = coupon ? coupon.percent : 0;
+  const orderTotal = Math.round(grossTotal * (100 - percent) / 100);
+  const discountCents = grossTotal - orderTotal;
 
   // Odeme (su an simulasyon; gercek saglayici payment.js icinde baglanacak)
   const pay = payment.charge({ amountCents: orderTotal, currency: orderCurrency, method: b.method });
@@ -541,8 +605,8 @@ add('POST', '/checkout', (ctx) => {
   const byStore = {};
   usable.forEach(r => { (byStore[r.store_id] = byStore[r.store_id] || []).push(r); });
 
-  const orderInfo = db.prepare('INSERT INTO orders (buyer_id,total_cents,currency,status,address,payment_method,payment_ref) VALUES (?,?,?,?,?,?,?)')
-    .run(ctx.user.id, orderTotal, orderCurrency, 'odendi', address, pay.method, pay.ref);
+  const orderInfo = db.prepare('INSERT INTO orders (buyer_id,total_cents,currency,status,address,payment_method,payment_ref,discount_cents,coupon_code) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(ctx.user.id, orderTotal, orderCurrency, 'odendi', address, pay.method, pay.ref, discountCents, coupon ? coupon.code : '');
   const orderId = Number(orderInfo.lastInsertRowid);
 
   const insSO = db.prepare('INSERT INTO seller_orders (order_id,store_id,subtotal_cents,commission_cents,currency,status) VALUES (?,?,?,?,?,?)');
@@ -551,13 +615,16 @@ add('POST', '/checkout', (ctx) => {
 
   Object.keys(byStore).forEach(storeId => {
     const items = byStore[storeId];
-    const subtotal = items.reduce((s, it) => s + it.price_cents * it.qty, 0);
+    const gross = items.reduce((s, it) => s + it.price_cents * it.qty, 0);
+    const subtotal = Math.round(gross * (100 - percent) / 100); // indirimli
     const commission = Math.round(subtotal * config.commissionRate);
     const soId = Number(insSO.run(orderId, storeId, subtotal, commission, items[0].currency, 'hazirlaniyor').lastInsertRowid);
     items.forEach(it => { insOI.run(soId, it.id, it.name, it.price_cents, it.currency, it.qty); decStock.run(it.qty, it.id); });
   });
 
+  if (coupon) db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon.id);
   db.prepare('DELETE FROM cart_items WHERE user_id=?').run(ctx.user.id);
+  ctx.setCookie('mooz_coupon=; Path=/; Max-Age=0');
   ctx.flashMsg('Siparisin alindi! Odeme: ' + payment.methodLabel(pay.method) + ' (simulasyon)');
   ctx.redirect('/orders/' + orderId);
 });
