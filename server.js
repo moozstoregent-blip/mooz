@@ -173,6 +173,14 @@ add('GET', '/', (ctx) => {
     return ctx.send(pages.storeHome(ctx, { store: ctx.storeSite, products: prods, activeCat, q }));
   }
 
+  // Filtre parametreleri
+  const sort = ['new', 'price_asc', 'price_desc', 'rating', 'name'].includes(ctx.query.sort) ? ctx.query.sort : 'new';
+  const instock = ctx.query.instock === '1';
+  const minRaw = parseFloat(String(ctx.query.min || '').replace(',', '.'));
+  const maxRaw = parseFloat(String(ctx.query.max || '').replace(',', '.'));
+  const minV = isFinite(minRaw) && minRaw > 0 ? minRaw : null;
+  const maxV = isFinite(maxRaw) && maxRaw > 0 ? maxRaw : null;
+
   let sql = `SELECT p.*, s.name AS store_name, s.slug AS store_slug, c.slug AS cat_slug,
     (SELECT COUNT(*) FROM reviews WHERE product_id = p.id) AS rating_count,
     (SELECT COALESCE(AVG(rating),0) FROM reviews WHERE product_id = p.id) AS rating_avg
@@ -181,10 +189,25 @@ add('GET', '/', (ctx) => {
   const args = [];
   if (activeCat) { sql += ' AND c.slug = ?'; args.push(activeCat); }
   if (q) { sql += ' AND (p.name LIKE ? OR s.name LIKE ?)'; args.push('%' + q + '%', '%' + q + '%'); }
-  sql += ' ORDER BY p.created_at DESC';
-  const products = db.prepare(sql).all(...args);
+  if (instock) { sql += ' AND p.stock > 0'; }
+  let products = db.prepare(sql).all(...args);
+
+  // Fiyati gosterim para birimine cevir (dogru filtre/siralama icin)
+  products = products.map(p => ({ ...p, _disp: H.convert(p.price_cents, p.currency, ctx.displayCur) }));
+  if (minV !== null) products = products.filter(p => p._disp >= Math.round(minV * 100));
+  if (maxV !== null) products = products.filter(p => p._disp <= Math.round(maxV * 100));
+
+  const sorters = {
+    new: (a, b) => b.id - a.id,
+    price_asc: (a, b) => a._disp - b._disp,
+    price_desc: (a, b) => b._disp - a._disp,
+    rating: (a, b) => (b.rating_avg - a.rating_avg) || (b.rating_count - a.rating_count),
+    name: (a, b) => a.name.localeCompare(b.name, 'tr'),
+  };
+  products.sort(sorters[sort]);
+
   ctx.title = config.brand.name;
-  ctx.send(pages.home(ctx, { products, activeCat, q }));
+  ctx.send(pages.home(ctx, { products, activeCat, q, sort, instock, min: ctx.query.min || '', max: ctx.query.max || '' }));
 });
 
 add('GET', '/product/:id', (ctx) => {
