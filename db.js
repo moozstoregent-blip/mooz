@@ -107,6 +107,15 @@ db.exec(`
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id, product_id)
   );
+
+  CREATE TABLE IF NOT EXISTS coupons (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    code        TEXT NOT NULL UNIQUE,
+    percent     INTEGER NOT NULL,
+    active      INTEGER NOT NULL DEFAULT 1,
+    used_count  INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // --- Seed (sadece bos ise) ----------------------------------------------
@@ -167,6 +176,8 @@ ensureColumn('seller_orders', 'carrier', "TEXT DEFAULT ''");
 ensureColumn('seller_orders', 'tracking_no', "TEXT DEFAULT ''");
 ensureColumn('products', 'image_url', "TEXT DEFAULT ''");
 ensureColumn('users', 'permissions', "TEXT DEFAULT ''");
+ensureColumn('orders', 'discount_cents', 'INTEGER DEFAULT 0');
+ensureColumn('orders', 'coupon_code', "TEXT DEFAULT ''");
 
 seed();
 
