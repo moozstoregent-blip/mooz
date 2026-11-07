@@ -42,7 +42,7 @@ function buildCtx(req, res) {
   let user = null, myStore = null;
   const uid = H.unsign(cookies.mooz_uid);
   if (uid) {
-    user = db.prepare('SELECT id,name,email,role FROM users WHERE id = ?').get(uid) || null;
+    user = db.prepare('SELECT id,name,email,role,permissions FROM users WHERE id = ?').get(uid) || null;
     if (user && user.role === 'seller')
       myStore = db.prepare('SELECT * FROM stores WHERE user_id = ?').get(user.id) || null;
   }
@@ -72,6 +72,7 @@ function buildCtx(req, res) {
     t: (key) => i18n.t(lang, key),
     price: (cents, cur) => H.money(H.convert(cents, cur || config.defaultCurrency, displayCur), displayCur),
     categories: allCategories(),
+    hasPerm: (key) => hasPerm(user, key),
     params: {}, query: {}, body: {},
     path: req.url.split('?')[0],
     _cookies: outCookies,
@@ -95,6 +96,32 @@ function buildCtx(req, res) {
 function requireRole(ctx, role) {
   if (!ctx.user) { ctx.redirect('/login'); return false; }
   if (role && ctx.user.role !== role) { ctx.send('Yetkiniz yok.', 403); return false; }
+  return true;
+}
+
+// Yetki anahtarlari ve Turkce etiketleri (personel rolleri)
+const PERMS = [
+  ['sellers',   'Satici Yonetimi'],
+  ['finance',   'Finans / Muhasebe'],
+  ['support',   'Destek (Helpdesk)'],
+  ['marketing', 'Pazarlama / Reklam'],
+  ['staff',     'Personel Yonetimi'],
+];
+const PERM_KEYS = PERMS.map(p => p[0]);
+
+// Bir kullanicinin belirli bir yetkisi var mi? (sadece admin rolu)
+function hasPerm(user, key) {
+  if (!user || user.role !== 'admin') return false;
+  if (user.permissions === '*') return true;
+  return (',' + (user.permissions || '') + ',').includes(',' + key + ',');
+}
+
+function requirePerm(ctx, key) {
+  if (!ctx.user) { ctx.redirect('/login'); return false; }
+  if (!hasPerm(ctx.user, key)) {
+    ctx.send('Bu bolum icin yetkiniz yok. Gerekli yetki: ' + key, 403);
+    return false;
+  }
   return true;
 }
 
@@ -266,26 +293,89 @@ add('POST', '/seller/products/:id/delete', (ctx) => {
 // --- Admin ---
 add('GET', '/admin', (ctx) => {
   if (!requireRole(ctx, 'admin')) return;
-  const stores = db.prepare(`SELECT s.*, u.email AS owner_email,
-    (SELECT COUNT(*) FROM products WHERE store_id = s.id) AS product_count
-    FROM stores s JOIN users u ON u.id = s.user_id ORDER BY s.created_at DESC`).all();
+  // Satici yonetimi yetkisi olana magaza listesi
+  const stores = ctx.hasPerm('sellers')
+    ? db.prepare(`SELECT s.*, u.email AS owner_email,
+        (SELECT COUNT(*) FROM products WHERE store_id = s.id) AS product_count
+        FROM stores s JOIN users u ON u.id = s.user_id ORDER BY s.created_at DESC`).all()
+    : null;
   const stats = {
-    stores: stores.length,
+    stores: db.prepare('SELECT COUNT(*) AS n FROM stores').get().n,
     sellers: db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='seller'").get().n,
     buyers: db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='buyer'").get().n,
     products: db.prepare('SELECT COUNT(*) AS n FROM products').get().n,
     orders: db.prepare('SELECT COUNT(*) AS n FROM orders').get().n,
     commission: db.prepare('SELECT COALESCE(SUM(commission_cents),0) AS n FROM seller_orders').get().n,
   };
+  // Finans yetkisi olana ciro ozeti
+  let finance = null;
+  if (ctx.hasPerm('finance')) {
+    finance = {
+      sales: db.prepare('SELECT COALESCE(SUM(total_cents),0) AS n FROM orders').get().n,
+      commission: stats.commission,
+      payout: db.prepare('SELECT COALESCE(SUM(subtotal_cents),0) AS n FROM seller_orders').get().n
+              - stats.commission,
+    };
+  }
   ctx.title = 'Admin';
-  ctx.send(pages.adminDashboard(ctx, { stores, stats }));
+  ctx.send(pages.adminDashboard(ctx, { stores, stats, finance }));
 });
 
 add('POST', '/admin/stores/:id/:action', (ctx) => {
-  if (!requireRole(ctx, 'admin')) return;
+  if (!requirePerm(ctx, 'sellers')) return;
   const map = { approve: 'active', suspend: 'suspended', pend: 'pending' };
   if (map[ctx.params.action]) db.prepare('UPDATE stores SET status = ? WHERE id = ?').run(map[ctx.params.action], ctx.params.id);
   ctx.redirect('/admin');
+});
+
+// --- Personel yonetimi (staff yetkisi) ---
+add('GET', '/admin/staff', (ctx) => {
+  if (!requirePerm(ctx, 'staff')) return;
+  const staff = db.prepare("SELECT id,name,email,permissions FROM users WHERE role='admin' ORDER BY id").all();
+  ctx.title = 'Personel';
+  ctx.send(pages.adminStaff(ctx, { staff, perms: PERMS }));
+});
+
+add('POST', '/admin/staff', (ctx) => {
+  if (!requirePerm(ctx, 'staff')) return;
+  const name = (ctx.body.name || '').trim();
+  const email = (ctx.body.email || '').trim().toLowerCase();
+  const pass = ctx.body.password || '';
+  if (!name || !email || pass.length < 6) {
+    ctx.flashMsg('Ad, e-posta ve en az 6 karakter sifre gerekli.');
+    return ctx.redirect('/admin/staff');
+  }
+  if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) {
+    ctx.flashMsg('Bu e-posta zaten kayitli.');
+    return ctx.redirect('/admin/staff');
+  }
+  const chosen = PERM_KEYS.filter(k => ctx.body['perm_' + k]).join(',');
+  db.prepare("INSERT INTO users (name,email,password_hash,role,permissions) VALUES (?,?,?,'admin',?)")
+    .run(name, email, H.hashPassword(pass), chosen);
+  ctx.flashMsg('Personel eklendi: ' + email);
+  ctx.redirect('/admin/staff');
+});
+
+add('POST', '/admin/staff/:id/perms', (ctx) => {
+  if (!requirePerm(ctx, 'staff')) return;
+  const target = db.prepare("SELECT id,email,permissions FROM users WHERE id=? AND role='admin'").get(ctx.params.id);
+  if (!target) { ctx.flashMsg('Personel bulunamadi.'); return ctx.redirect('/admin/staff'); }
+  if (target.email === 'admin@mooz.store') { ctx.flashMsg('Ana sahip yetkileri degistirilemez.'); return ctx.redirect('/admin/staff'); }
+  const chosen = PERM_KEYS.filter(k => ctx.body['perm_' + k]).join(',');
+  db.prepare('UPDATE users SET permissions = ? WHERE id = ?').run(chosen, target.id);
+  ctx.flashMsg('Yetkiler guncellendi: ' + target.email);
+  ctx.redirect('/admin/staff');
+});
+
+add('POST', '/admin/staff/:id/delete', (ctx) => {
+  if (!requirePerm(ctx, 'staff')) return;
+  const target = db.prepare("SELECT id,email FROM users WHERE id=? AND role='admin'").get(ctx.params.id);
+  if (!target) { ctx.flashMsg('Personel bulunamadi.'); return ctx.redirect('/admin/staff'); }
+  if (target.email === 'admin@mooz.store') { ctx.flashMsg('Ana sahip hesabi silinemez.'); return ctx.redirect('/admin/staff'); }
+  if (target.id === ctx.user.id) { ctx.flashMsg('Kendi hesabinizi silemezsiniz.'); return ctx.redirect('/admin/staff'); }
+  db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
+  ctx.flashMsg('Personel silindi: ' + target.email);
+  ctx.redirect('/admin/staff');
 });
 
 // =========================================================================
