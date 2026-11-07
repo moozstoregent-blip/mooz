@@ -99,6 +99,14 @@ db.exec(`
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(product_id, user_id)
   );
+
+  CREATE TABLE IF NOT EXISTS favorites (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    product_id  INTEGER NOT NULL REFERENCES products(id),
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, product_id)
+  );
 `);
 
 // --- Seed (sadece bos ise) ----------------------------------------------
