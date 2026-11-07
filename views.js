@@ -135,7 +135,7 @@ function totalsLine(ctx, rows) {
 }
 
 const pages = {
-  home(ctx, { products, activeCat, q }) {
+  home(ctx, { products, activeCat, q, sort, instock, min, max }) {
     const t = ctx.t;
     const hero = (!q && !activeCat) ? `
       <section class="hero">
@@ -146,11 +146,42 @@ const pages = {
       </section>` : '';
     const heading = q ? `"${esc(q)}" ${esc(t('results'))}`
       : (activeCat ? esc((ctx.categories.find(c => c.slug === activeCat) || {}).name || '') : esc(t('all_products')));
+
+    // Filtre & siralama cubugu
+    const sortOpt = (v, label) => `<option value="${v}"${sort === v ? ' selected' : ''}>${label}</option>`;
+    const filterBar = `
+      <form class="filter-bar" method="get" action="/">
+        ${q ? `<input type="hidden" name="q" value="${esc(q)}">` : ''}
+        ${activeCat ? `<input type="hidden" name="cat" value="${esc(activeCat)}">` : ''}
+        <div class="fb-group">
+          <label>Sirala</label>
+          <select name="sort" onchange="this.form.submit()">
+            ${sortOpt('new', 'En yeni')}
+            ${sortOpt('price_asc', 'Fiyat (artan)')}
+            ${sortOpt('price_desc', 'Fiyat (azalan)')}
+            ${sortOpt('rating', 'Puan (yuksek)')}
+            ${sortOpt('name', 'Isme gore (A-Z)')}
+          </select>
+        </div>
+        <div class="fb-group">
+          <label>Fiyat (${esc(ctx.displayCur)})</label>
+          <div class="fb-price">
+            <input type="number" name="min" value="${esc(String(min || ''))}" placeholder="min" min="0" step="0.01">
+            <span>-</span>
+            <input type="number" name="max" value="${esc(String(max || ''))}" placeholder="max" min="0" step="0.01">
+          </div>
+        </div>
+        <label class="fb-check"><input type="checkbox" name="instock" value="1"${instock ? ' checked' : ''} onchange="this.form.submit()"> Sadece stokta</label>
+        <button class="btn btn-brand" type="submit">Uygula</button>
+        ${(q || activeCat || instock || min || max || sort !== 'new') ? `<a class="fb-clear" href="/">Temizle</a>` : ''}
+      </form>`;
+
     const grid = products.length
       ? `<div class="grid">${products.map(p => productCard(ctx, p, true)).join('')}</div>`
-      : `<p class="empty">${esc(t('empty_products'))}</p>`;
+      : `<p class="empty">Bu filtrelere uygun urun bulunamadi. <a href="/">Filtreleri temizle &rarr;</a></p>`;
     return layout(ctx, `${hero}
       <div class="sect-h"><h2>${heading}</h2><span class="muted">${products.length} ${esc(t('n_products'))}</span></div>
+      ${filterBar}
       ${grid}`);
   },
 
