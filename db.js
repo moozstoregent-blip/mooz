@@ -89,6 +89,16 @@ db.exec(`
     currency        TEXT NOT NULL DEFAULT 'EUR',
     qty             INTEGER NOT NULL DEFAULT 1
   );
+
+  CREATE TABLE IF NOT EXISTS reviews (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id  INTEGER NOT NULL REFERENCES products(id),
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    rating      INTEGER NOT NULL,
+    comment     TEXT DEFAULT '',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(product_id, user_id)
+  );
 `);
 
 // --- Seed (sadece bos ise) ----------------------------------------------
