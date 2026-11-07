@@ -295,7 +295,10 @@ add('POST', '/seller/products', (ctx) => {
   const b = ctx.body;
   if (!b.name || !b.price) { ctx.flashMsg('Urun adi ve fiyat zorunlu.'); return ctx.redirect('/seller/products/new'); }
   const cents = Math.round(parseFloat(String(b.price).replace(',', '.')) * 100) || 0;
-  const imageUrl = /^https?:\/\//i.test((b.image_url || '').trim()) ? b.image_url.trim() : '';
+  // Dosya yuklendiyse onu kullan (data URI), yoksa URL alanini kabul et
+  const uploaded = b.file_image_file || '';
+  const imageUrl = uploaded.startsWith('data:image/') ? uploaded
+    : (/^https?:\/\//i.test((b.image_url || '').trim()) ? b.image_url.trim() : '');
   db.prepare(`INSERT INTO products (store_id,category_id,name,description,price_cents,currency,emoji,stock,image_url)
     VALUES (?,?,?,?,?,?,?,?,?)`).run(
     ctx.myStore.id, b.category_id || null, b.name, b.description || '', cents,
@@ -577,13 +580,64 @@ const server = http.createServer((req, res) => {
   };
 
   if (req.method === 'POST') {
-    let data = '';
-    req.on('data', c => { data += c; if (data.length > 1e6) req.destroy(); });
-    req.on('end', () => run(qs.parse(data)));
+    const ctype = req.headers['content-type'] || '';
+    const chunks = [];
+    let size = 0;
+    const limit = 4 * 1024 * 1024; // 4 MB (base64 gorsel icin)
+    req.on('data', c => { size += c.length; if (size > limit) { req.destroy(); return; } chunks.push(c); });
+    req.on('end', () => {
+      const buf = Buffer.concat(chunks);
+      if (ctype.startsWith('multipart/form-data')) {
+        const m = ctype.match(/boundary=(?:"([^"]+)"|([^;]+))/);
+        const boundary = m ? (m[1] || m[2]).trim() : '';
+        run(parseMultipart(buf, boundary));
+      } else {
+        run(qs.parse(buf.toString('utf8')));
+      }
+    });
   } else {
     run();
   }
 });
+
+// Basit multipart/form-data cozucu (sifir bagimlilik).
+// Metin alanlarini body'ye koyar; dosya alanini image_<name> = data URI yapar.
+function parseMultipart(buf, boundary) {
+  const out = {};
+  if (!boundary) return out;
+  const delim = Buffer.from('--' + boundary);
+  let start = buf.indexOf(delim);
+  if (start < 0) return out;
+  start += delim.length;
+  while (start < buf.length) {
+    if (buf[start] === 0x2d && buf[start + 1] === 0x2d) break; // kapanis "--"
+    start += 2; // \r\n
+    const headerEnd = buf.indexOf(Buffer.from('\r\n\r\n'), start);
+    if (headerEnd < 0) break;
+    const header = buf.slice(start, headerEnd).toString('utf8');
+    const bodyStart = headerEnd + 4;
+    const nextDelim = buf.indexOf(delim, bodyStart);
+    if (nextDelim < 0) break;
+    const content = buf.slice(bodyStart, nextDelim - 2); // sondaki \r\n'i at
+    const nameM = header.match(/name="([^"]*)"/i);
+    const fileM = header.match(/filename="([^"]*)"/i);
+    const typeM = header.match(/Content-Type:\s*([^\r\n]+)/i);
+    if (nameM) {
+      const name = nameM[1];
+      if (fileM && fileM[1]) {
+        // Dosya: sadece gorselleri kabul et, data URI'ye cevir
+        const mime = (typeM ? typeM[1].trim() : '').toLowerCase();
+        if (/^image\/(png|jpe?g|webp|gif)$/.test(mime) && content.length > 0) {
+          out['file_' + name] = 'data:' + mime + ';base64,' + content.toString('base64');
+        }
+      } else {
+        out[name] = content.toString('utf8');
+      }
+    }
+    start = nextDelim + delim.length;
+  }
+  return out;
+}
 
 server.listen(config.port, () => {
   console.log(`\n  ${config.brand.name} calisiyor -> http://localhost:${config.port}\n`);
