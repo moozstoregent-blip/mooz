@@ -419,6 +419,7 @@ const pages = {
     // Yetkiye gore bolum erisim linkleri
     const navLinks = [];
     if (ctx.hasPerm('staff')) navLinks.push('<a class="btn btn-light" href="/admin/staff">Personel yonetimi</a>');
+    if (ctx.hasPerm('marketing')) navLinks.push('<a class="btn btn-light" href="/admin/coupons">Kuponlar</a>');
     const navBar = navLinks.length ? `<div class="admin-nav">${navLinks.join('')}</div>` : '';
 
     // Finans ozeti (sadece finance yetkisi)
@@ -513,7 +514,36 @@ const pages = {
         <tbody>${rows}</tbody></table></div>`);
   },
 
-  cart(ctx, { rows }) {
+  adminCoupons(ctx, { coupons }) {
+    const rows = coupons.length ? coupons.map(c => `<tr>
+      <td><strong>${esc(c.code)}</strong></td>
+      <td>%${c.percent}</td>
+      <td>${c.active ? '<span class="badge ok">Aktif</span>' : '<span class="badge off">Pasif</span>'}</td>
+      <td>${c.used_count} kez</td>
+      <td class="actions">
+        <form action="/admin/coupons/${c.id}/toggle" method="post"><button class="link-ok" type="submit">${c.active ? 'Pasiflestir' : 'Aktiflestir'}</button></form>
+        <form action="/admin/coupons/${c.id}/delete" method="post" onsubmit="return confirm('Kupon silinsin mi?')"><button class="link-danger" type="submit">Sil</button></form>
+      </td></tr>`).join('')
+      : `<tr><td colspan="5" class="muted">Henuz kupon yok.</td></tr>`;
+
+    return layout(ctx, `
+      <div class="panel-head admin"><div><h1>Kuponlar</h1><p class="muted">Yuzde indirim kodlari olustur, musteriler sepette kullanir.</p></div>
+        <a class="btn btn-light" href="/admin">&larr; Admin paneli</a></div>
+
+      <div class="sect-h"><h2>Yeni kupon</h2></div>
+      <form action="/admin/coupons" method="post" class="form-card">
+        <label>Kupon kodu (3-20 harf/rakam)<input name="code" placeholder="ORN: HOSGELDIN10" required></label>
+        <label>Indirim yuzdesi (1-90)<input name="percent" type="number" min="1" max="90" placeholder="10" required></label>
+        <button class="btn btn-brand" type="submit">Kupon olustur</button>
+      </form>
+
+      <div class="sect-h"><h2>Mevcut kuponlar</h2></div>
+      <div class="table-wrap"><table class="ptable">
+        <thead><tr><th>Kod</th><th>Indirim</th><th>Durum</th><th>Kullanim</th><th>Islem</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`);
+  },
+
+  cart(ctx, { rows, coupon }) {
     const t = ctx.t;
     if (!rows.length) return layout(ctx, `
       <h1>${esc(t('cart_title'))}</h1>
@@ -542,16 +572,38 @@ const pages = {
         </div>`).join('');
       return `<div class="cart-group"><h3>\u{1F3EA} ${esc(g.name)}</h3>${items}</div>`;
     }).join('');
+    const gross = rows.reduce((s, r) => s + convert(r.price_cents * r.qty, r.currency, ctx.displayCur), 0);
+    const percent = coupon ? coupon.percent : 0;
+    const net = Math.round(gross * (100 - percent) / 100);
+    const discount = gross - net;
+
+    const couponBox = coupon ? `
+      <div class="coupon-applied">
+        <span>\u{1F3F7} <strong>${esc(coupon.code)}</strong> — %${coupon.percent} indirim</span>
+        <form action="/cart/coupon/remove" method="post"><button class="link-danger" type="submit">Kaldir</button></form>
+      </div>` : `
+      <form action="/cart/coupon" method="post" class="coupon-form">
+        <input type="text" name="code" placeholder="Indirim kodu" maxlength="20">
+        <button class="btn btn-light" type="submit">Uygula</button>
+      </form>`;
+
+    const totalRows = coupon ? `
+      <div class="totrow"><span>Ara toplam</span><span>${money(gross, ctx.displayCur)}</span></div>
+      <div class="totrow discount"><span>Indirim (%${coupon.percent})</span><span>- ${money(discount, ctx.displayCur)}</span></div>
+      <div class="totrow big"><span>${esc(t('total'))}</span><span>${money(net, ctx.displayCur)}</span></div>`
+      : `<div class="totrow big"><span>${esc(t('total'))}</span><span>${money(gross, ctx.displayCur)}</span></div>`;
+
     return layout(ctx, `
       <h1>${esc(t('cart_title'))}</h1>
       <div class="cart-list">${groups}</div>
       <div class="cart-summary">
-        <div class="totrow big"><span>${esc(t('total'))}</span><span>${totalsLine(ctx, rows)}</span></div>
+        ${couponBox}
+        ${totalRows}
         <a class="btn btn-brand big" href="/checkout">${esc(t('to_checkout'))} &rarr;</a>
       </div>`);
   },
 
-  checkout(ctx, { rows }) {
+  checkout(ctx, { rows, coupon }) {
     const t = ctx.t;
     const byStore = {};
     rows.forEach(r => { (byStore[r.store_id] = byStore[r.store_id] || { name: r.store_name, items: [] }).items.push(r); });
@@ -584,7 +636,16 @@ const pages = {
         <div class="auth-card" style="margin:0">
           <h3>${esc(t('summary'))}</h3>
           ${summary}
-          <div class="totrow big" style="margin-top:12px"><span>${esc(t('total'))}</span><span>${totalsLine(ctx, rows)}</span></div>
+          ${(() => {
+            const gross = rows.reduce((s, r) => s + convert(r.price_cents * r.qty, r.currency, ctx.displayCur), 0);
+            const percent = coupon ? coupon.percent : 0;
+            const net = Math.round(gross * (100 - percent) / 100);
+            if (!coupon) return `<div class="totrow big" style="margin-top:12px"><span>${esc(t('total'))}</span><span>${money(gross, ctx.displayCur)}</span></div>`;
+            return `
+              <div class="totrow" style="margin-top:12px"><span>Ara toplam</span><span>${money(gross, ctx.displayCur)}</span></div>
+              <div class="totrow discount"><span>\u{1F3F7} ${esc(coupon.code)} (%${coupon.percent})</span><span>- ${money(gross - net, ctx.displayCur)}</span></div>
+              <div class="totrow big"><span>${esc(t('total'))}</span><span>${money(net, ctx.displayCur)}</span></div>`;
+          })()}
         </div>
       </div>`);
   },
