@@ -178,6 +178,7 @@ ensureColumn('products', 'image_url', "TEXT DEFAULT ''");
 ensureColumn('users', 'permissions', "TEXT DEFAULT ''");
 ensureColumn('orders', 'discount_cents', 'INTEGER DEFAULT 0');
 ensureColumn('orders', 'coupon_code', "TEXT DEFAULT ''");
+ensureColumn('seller_orders', 'seen', 'INTEGER DEFAULT 0');
 
 seed();
 
