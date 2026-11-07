@@ -148,7 +148,11 @@ ensureColumn('orders', 'payment_ref', "TEXT DEFAULT ''");
 ensureColumn('seller_orders', 'carrier', "TEXT DEFAULT ''");
 ensureColumn('seller_orders', 'tracking_no', "TEXT DEFAULT ''");
 ensureColumn('products', 'image_url', "TEXT DEFAULT ''");
+ensureColumn('users', 'permissions', "TEXT DEFAULT ''");
 
 seed();
+
+// Ana sahip admin'e tum yetkiler (*). Personel adminler kendi yetkileriyle kalir.
+db.exec("UPDATE users SET permissions='*' WHERE email='admin@mooz.store' AND (permissions IS NULL OR permissions='')");
 
 module.exports = db;
