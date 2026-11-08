@@ -417,29 +417,30 @@ const pages = {
   },
 
   adminDashboard(ctx, { stores, stats, finance }) {
+    const t = ctx.t;
     // Yetkiye gore bolum erisim linkleri
     const navLinks = [];
-    if (ctx.hasPerm('staff')) navLinks.push('<a class="btn btn-light" href="/admin/staff">Personel yonetimi</a>');
-    if (ctx.hasPerm('marketing')) navLinks.push('<a class="btn btn-light" href="/admin/coupons">Kuponlar</a>');
+    if (ctx.hasPerm('staff')) navLinks.push(`<a class="btn btn-light" href="/admin/staff">${esc(t('ad_nav_staff'))}</a>`);
+    if (ctx.hasPerm('marketing')) navLinks.push(`<a class="btn btn-light" href="/admin/coupons">${esc(t('ad_nav_coupons'))}</a>`);
     const navBar = navLinks.length ? `<div class="admin-nav">${navLinks.join('')}</div>` : '';
 
     // Finans ozeti (sadece finance yetkisi)
     const financeBox = finance ? `
-      <div class="sect-h"><h2>Finans ozeti</h2></div>
+      <div class="sect-h"><h2>${esc(t('ad_finance'))}</h2></div>
       <div class="stat-row">
-        <div class="stat"><div class="n">${money(finance.sales, 'EUR')}</div><div class="l">Toplam ciro</div></div>
-        <div class="stat"><div class="n">${money(finance.commission, 'EUR')}</div><div class="l">Komisyon geliri</div></div>
-        <div class="stat"><div class="n">${money(finance.payout, 'EUR')}</div><div class="l">Saticilara odenecek</div></div>
+        <div class="stat"><div class="n">${money(finance.sales, 'EUR')}</div><div class="l">${esc(t('ad_revenue'))}</div></div>
+        <div class="stat"><div class="n">${money(finance.commission, 'EUR')}</div><div class="l">${esc(t('ad_commission'))}</div></div>
+        <div class="stat"><div class="n">${money(finance.payout, 'EUR')}</div><div class="l">${esc(t('ad_payout'))}</div></div>
       </div>` : '';
 
     // Magazalar (sadece sellers yetkisi)
     let storeBox = '';
     if (stores) {
       const rows = stores.map(s => {
-        const badge = s.status === 'active' ? '<span class="badge ok">Aktif</span>'
-          : s.status === 'pending' ? '<span class="badge warn">Onayda</span>'
-          : '<span class="badge off">Askida</span>';
-        const actions = `${s.status !== 'active' ? `<form action="/admin/stores/${s.id}/approve" method="post"><button class="link-ok" type="submit">Onayla</button></form>` : ''}${s.status === 'active' ? `<form action="/admin/stores/${s.id}/suspend" method="post"><button class="link-danger" type="submit">Askiya al</button></form>` : ''}`;
+        const badge = s.status === 'active' ? `<span class="badge ok">${esc(t('b_active'))}</span>`
+          : s.status === 'pending' ? `<span class="badge warn">${esc(t('b_pending'))}</span>`
+          : `<span class="badge off">${esc(t('b_suspended'))}</span>`;
+        const actions = `${s.status !== 'active' ? `<form action="/admin/stores/${s.id}/approve" method="post"><button class="link-ok" type="submit">${esc(t('act_approve'))}</button></form>` : ''}${s.status === 'active' ? `<form action="/admin/stores/${s.id}/suspend" method="post"><button class="link-danger" type="submit">${esc(t('act_suspend'))}</button></form>` : ''}`;
         return `<tr>
           <td><strong>${esc(s.name)}</strong><br><span class="muted small">/store/${esc(s.slug)}</span></td>
           <td class="small">${esc(s.owner_email)}</td>
@@ -448,47 +449,47 @@ const pages = {
           <td class="actions">${actions}</td></tr>`;
       }).join('');
       storeBox = `
-        <div class="sect-h"><h2>Magazalar</h2></div>
+        <div class="sect-h"><h2>${esc(t('ad_stores'))}</h2></div>
         <div class="table-wrap"><table class="ptable">
-          <thead><tr><th>Magaza</th><th>Sahip</th><th>Urun</th><th>Durum</th><th>Islem</th></tr></thead>
+          <thead><tr><th>${esc(t('th_store'))}</th><th>${esc(t('th_owner'))}</th><th>${esc(t('th_product'))}</th><th>${esc(t('status'))}</th><th>${esc(t('th_action'))}</th></tr></thead>
           <tbody>${rows}</tbody></table></div>`;
     }
 
     return layout(ctx, `
-      <div class="panel-head admin"><div><h1>Admin Paneli</h1><p class="muted">Platformu buradan yonet.</p></div></div>
+      <div class="panel-head admin"><div><h1>${esc(t('ad_title'))}</h1><p class="muted">${esc(t('ad_sub'))}</p></div></div>
       ${navBar}
       <div class="stat-row">
-        <div class="stat"><div class="n">${stats.stores}</div><div class="l">Magaza</div></div>
-        <div class="stat"><div class="n">${stats.sellers}</div><div class="l">Satici</div></div>
-        <div class="stat"><div class="n">${stats.buyers}</div><div class="l">Alici</div></div>
-        <div class="stat"><div class="n">${stats.products}</div><div class="l">Urun</div></div>
-        <div class="stat"><div class="n">${stats.orders}</div><div class="l">Siparis</div></div>
-        <div class="stat"><div class="n">${money(stats.commission, 'EUR')}</div><div class="l">Komisyon geliri</div></div>
+        <div class="stat"><div class="n">${stats.stores}</div><div class="l">${esc(t('ad_stat_stores'))}</div></div>
+        <div class="stat"><div class="n">${stats.sellers}</div><div class="l">${esc(t('ad_stat_sellers'))}</div></div>
+        <div class="stat"><div class="n">${stats.buyers}</div><div class="l">${esc(t('ad_stat_buyers'))}</div></div>
+        <div class="stat"><div class="n">${stats.products}</div><div class="l">${esc(t('ad_stat_products'))}</div></div>
+        <div class="stat"><div class="n">${stats.orders}</div><div class="l">${esc(t('ad_stat_orders'))}</div></div>
+        <div class="stat"><div class="n">${money(stats.commission, 'EUR')}</div><div class="l">${esc(t('ad_commission'))}</div></div>
       </div>
       ${financeBox}
       ${storeBox}`);
   },
 
   adminStaff(ctx, { staff, perms }) {
-    const checkboxes = (prefix, current) => perms.map(([key, label]) => {
+    const t = ctx.t;
+    const permLabel = (key) => t('perm_' + key);
+    const checkboxes = (prefix, current) => perms.map(([key]) => {
       const on = current === '*' || (',' + (current || '') + ',').includes(',' + key + ',');
       const dis = current === '*' ? ' disabled' : '';
-      return `<label class="perm-chk"><input type="checkbox" name="${prefix}${key}"${on ? ' checked' : ''}${dis}> ${esc(label)}</label>`;
+      return `<label class="perm-chk"><input type="checkbox" name="${prefix}${key}"${on ? ' checked' : ''}${dis}> ${esc(permLabel(key))}</label>`;
     }).join('');
 
     const rows = staff.map(u => {
       const owner = u.email === 'admin@mooz.store';
-      const permText = u.permissions === '*' ? '<span class="badge ok">Tum yetkiler (sahip)</span>'
-        : (u.permissions ? u.permissions.split(',').filter(Boolean).map(k => {
-            const p = perms.find(x => x[0] === k); return p ? esc(p[1]) : esc(k);
-          }).join(', ') : '<span class="muted">yetki yok</span>');
-      const editForm = owner ? '<span class="muted small">Ana sahip — degistirilemez</span>' : `
+      const permText = u.permissions === '*' ? `<span class="badge ok">${esc(t('st_all_owner'))}</span>`
+        : (u.permissions ? u.permissions.split(',').filter(Boolean).map(k => esc(permLabel(k))).join(', ') : `<span class="muted">${esc(t('st_no_perms'))}</span>`);
+      const editForm = owner ? `<span class="muted small">${esc(t('st_owner_locked'))}</span>` : `
         <form action="/admin/staff/${u.id}/perms" method="post" class="perm-form">
           <div class="perm-grid">${checkboxes('perm_', u.permissions)}</div>
-          <button class="btn btn-light small" type="submit">Kaydet</button>
+          <button class="btn btn-light small" type="submit">${esc(t('save'))}</button>
         </form>
-        <form action="/admin/staff/${u.id}/delete" method="post" onsubmit="return confirm('Bu personel silinsin mi?')">
-          <button class="link-danger" type="submit">Sil</button>
+        <form action="/admin/staff/${u.id}/delete" method="post" onsubmit="return confirm('${esc(t('st_confirm_del'))}')">
+          <button class="link-danger" type="submit">${esc(t('delete'))}</button>
         </form>`;
       return `<tr>
         <td><strong>${esc(u.name)}</strong><br><span class="muted small">${esc(u.email)}</span></td>
@@ -497,50 +498,51 @@ const pages = {
     }).join('');
 
     return layout(ctx, `
-      <div class="panel-head admin"><div><h1>Personel Yonetimi</h1><p class="muted">Ekibine sinirli yetkili admin hesaplari ac.</p></div>
-        <a class="btn btn-light" href="/admin">&larr; Admin paneli</a></div>
+      <div class="panel-head admin"><div><h1>${esc(t('st_title'))}</h1><p class="muted">${esc(t('st_sub'))}</p></div>
+        <a class="btn btn-light" href="/admin">&larr; ${esc(t('st_back'))}</a></div>
 
-      <div class="sect-h"><h2>Yeni personel ekle</h2></div>
+      <div class="sect-h"><h2>${esc(t('st_add'))}</h2></div>
       <form action="/admin/staff" method="post" class="form-card">
-        <label>Ad Soyad<input name="name" required></label>
-        <label>E-posta<input name="email" type="email" required></label>
-        <label>Sifre (en az 6 karakter)<input name="password" type="password" minlength="6" required></label>
-        <div class="field"><span class="flabel">Yetkiler</span><div class="perm-grid">${checkboxes('perm_', '')}</div></div>
-        <button class="btn btn-brand" type="submit">Personel ekle</button>
+        <label>${esc(t('st_fullname'))}<input name="name" required></label>
+        <label>${esc(t('email'))}<input name="email" type="email" required></label>
+        <label>${esc(t('st_password6'))}<input name="password" type="password" minlength="6" required></label>
+        <div class="field"><span class="flabel">${esc(t('st_perms'))}</span><div class="perm-grid">${checkboxes('perm_', '')}</div></div>
+        <button class="btn btn-brand" type="submit">${esc(t('st_add_btn'))}</button>
       </form>
 
-      <div class="sect-h"><h2>Personel listesi</h2></div>
+      <div class="sect-h"><h2>${esc(t('st_list'))}</h2></div>
       <div class="table-wrap"><table class="ptable">
-        <thead><tr><th>Kisi</th><th>Yetkiler</th><th>Duzenle</th></tr></thead>
+        <thead><tr><th>${esc(t('th_person'))}</th><th>${esc(t('th_perms'))}</th><th>${esc(t('th_edit'))}</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`);
   },
 
   adminCoupons(ctx, { coupons }) {
+    const t = ctx.t;
     const rows = coupons.length ? coupons.map(c => `<tr>
       <td><strong>${esc(c.code)}</strong></td>
       <td>%${c.percent}</td>
-      <td>${c.active ? '<span class="badge ok">Aktif</span>' : '<span class="badge off">Pasif</span>'}</td>
-      <td>${c.used_count} kez</td>
+      <td>${c.active ? `<span class="badge ok">${esc(t('b_active'))}</span>` : `<span class="badge off">${esc(t('co_inactive'))}</span>`}</td>
+      <td>${c.used_count} ${esc(t('co_times'))}</td>
       <td class="actions">
-        <form action="/admin/coupons/${c.id}/toggle" method="post"><button class="link-ok" type="submit">${c.active ? 'Pasiflestir' : 'Aktiflestir'}</button></form>
-        <form action="/admin/coupons/${c.id}/delete" method="post" onsubmit="return confirm('Kupon silinsin mi?')"><button class="link-danger" type="submit">Sil</button></form>
+        <form action="/admin/coupons/${c.id}/toggle" method="post"><button class="link-ok" type="submit">${c.active ? esc(t('co_deactivate')) : esc(t('co_activate'))}</button></form>
+        <form action="/admin/coupons/${c.id}/delete" method="post" onsubmit="return confirm('${esc(t('co_confirm_del'))}')"><button class="link-danger" type="submit">${esc(t('delete'))}</button></form>
       </td></tr>`).join('')
-      : `<tr><td colspan="5" class="muted">Henuz kupon yok.</td></tr>`;
+      : `<tr><td colspan="5" class="muted">${esc(t('co_none'))}</td></tr>`;
 
     return layout(ctx, `
-      <div class="panel-head admin"><div><h1>Kuponlar</h1><p class="muted">Yuzde indirim kodlari olustur, musteriler sepette kullanir.</p></div>
-        <a class="btn btn-light" href="/admin">&larr; Admin paneli</a></div>
+      <div class="panel-head admin"><div><h1>${esc(t('co_title'))}</h1><p class="muted">${esc(t('co_sub'))}</p></div>
+        <a class="btn btn-light" href="/admin">&larr; ${esc(t('st_back'))}</a></div>
 
-      <div class="sect-h"><h2>Yeni kupon</h2></div>
+      <div class="sect-h"><h2>${esc(t('co_new'))}</h2></div>
       <form action="/admin/coupons" method="post" class="form-card">
-        <label>Kupon kodu (3-20 harf/rakam)<input name="code" placeholder="ORN: HOSGELDIN10" required></label>
-        <label>Indirim yuzdesi (1-90)<input name="percent" type="number" min="1" max="90" placeholder="10" required></label>
-        <button class="btn btn-brand" type="submit">Kupon olustur</button>
+        <label>${esc(t('co_code_label'))}<input name="code" placeholder="HOSGELDIN10" required></label>
+        <label>${esc(t('co_pct_label'))}<input name="percent" type="number" min="1" max="90" placeholder="10" required></label>
+        <button class="btn btn-brand" type="submit">${esc(t('co_create_btn'))}</button>
       </form>
 
-      <div class="sect-h"><h2>Mevcut kuponlar</h2></div>
+      <div class="sect-h"><h2>${esc(t('co_existing'))}</h2></div>
       <div class="table-wrap"><table class="ptable">
-        <thead><tr><th>Kod</th><th>Indirim</th><th>Durum</th><th>Kullanim</th><th>Islem</th></tr></thead>
+        <thead><tr><th>${esc(t('th_code'))}</th><th>${esc(t('th_discount'))}</th><th>${esc(t('status'))}</th><th>${esc(t('th_usage'))}</th><th>${esc(t('th_action'))}</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`);
   },
 
