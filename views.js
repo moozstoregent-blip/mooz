@@ -32,7 +32,7 @@ function layout(ctx, body) {
   let right;
   if (user) {
     right = `
-      <a class="btn btn-ghost" href="/favorites">&#x2665; Favorilerim${ctx.favCount ? ' (' + ctx.favCount + ')' : ''}</a>
+      <a class="btn btn-ghost" href="/favorites">&#x2665; ${esc(t('fav_mine'))}${ctx.favCount ? ' (' + ctx.favCount + ')' : ''}</a>
       <a class="btn btn-ghost" href="/orders">${esc(t('orders'))}</a>
       <a class="btn btn-brand" href="/cart">${esc(t('cart'))}${ctx.cartCount ? ' (' + ctx.cartCount + ')' : ''}</a>
       ${user.role === 'seller' ? `<a class="btn btn-ghost nav-badge-wrap" href="/seller">${esc(t('seller_panel'))}${ctx.newOrders ? `<span class="nav-badge">${ctx.newOrders}</span>` : ''}</a>` : ''}
@@ -82,7 +82,7 @@ function thumb(p) {
 }
 
 // Yildiz gosterimi (ortalama puan). count verilirse yanina adet yazar.
-function stars(avg, count) {
+function stars(ctx, avg, count) {
   const a = Math.round((avg || 0) * 2) / 2; // 0.5 adimli
   let s = '';
   for (let i = 1; i <= 5; i++) {
@@ -91,7 +91,7 @@ function stars(avg, count) {
     else s += '<span class="st">★</span>';
   }
   const label = (count === undefined) ? '' :
-    (count > 0 ? `<span class="rcount">${(avg).toFixed(1)} (${count})</span>` : `<span class="rcount muted">Henuz yorum yok</span>`);
+    (count > 0 ? `<span class="rcount">${(avg).toFixed(1)} (${count})</span>` : `<span class="rcount muted">${esc(ctx.t('rv_none_short'))}</span>`);
   return `<span class="stars">${s}${label}</span>`;
 }
 
@@ -101,13 +101,13 @@ function favBtn(ctx, pid, cls) {
   return `<form action="/favorites/toggle" method="post" class="fav-form ${cls || ''}">
     <input type="hidden" name="product_id" value="${pid}">
     <input type="hidden" name="back" value="${esc(ctx.path)}">
-    <button type="submit" class="fav-btn${on ? ' on' : ''}" title="${on ? 'Favorilerden cikar' : 'Favorilere ekle'}" aria-label="favori">${on ? '♥' : '♡'}</button>
+    <button type="submit" class="fav-btn${on ? ' on' : ''}" title="${esc(ctx.t(on ? 'fav_remove' : 'fav_add'))}" aria-label="favori">${on ? '♥' : '♡'}</button>
   </form>`;
 }
 
 function productCard(ctx, p, showSeller) {
   const rating = (p.rating_count !== undefined)
-    ? `<div class="card-rating">${stars(p.rating_avg || 0, p.rating_count)}</div>` : '';
+    ? `<div class="card-rating">${stars(ctx, p.rating_avg || 0, p.rating_count)}</div>` : '';
   return `<div class="card">
     <a href="/product/${p.id}" class="thumb">${thumb(p)}${showSeller ? `<span class="seller-tag">\u{1F3EA} ${esc(p.store_name)}</span>` : ''}</a>
     ${favBtn(ctx, p.id, 'on-card')}
@@ -154,31 +154,31 @@ const pages = {
         ${q ? `<input type="hidden" name="q" value="${esc(q)}">` : ''}
         ${activeCat ? `<input type="hidden" name="cat" value="${esc(activeCat)}">` : ''}
         <div class="fb-group">
-          <label>Sirala</label>
+          <label>${esc(t('f_sort'))}</label>
           <select name="sort" onchange="this.form.submit()">
-            ${sortOpt('new', 'En yeni')}
-            ${sortOpt('price_asc', 'Fiyat (artan)')}
-            ${sortOpt('price_desc', 'Fiyat (azalan)')}
-            ${sortOpt('rating', 'Puan (yuksek)')}
-            ${sortOpt('name', 'Isme gore (A-Z)')}
+            ${sortOpt('new', esc(t('f_sort_new')))}
+            ${sortOpt('price_asc', esc(t('f_sort_price_asc')))}
+            ${sortOpt('price_desc', esc(t('f_sort_price_desc')))}
+            ${sortOpt('rating', esc(t('f_sort_rating')))}
+            ${sortOpt('name', esc(t('f_sort_name')))}
           </select>
         </div>
         <div class="fb-group">
-          <label>Fiyat (${esc(ctx.displayCur)})</label>
+          <label>${esc(t('f_price'))} (${esc(ctx.displayCur)})</label>
           <div class="fb-price">
             <input type="number" name="min" value="${esc(String(min || ''))}" placeholder="min" min="0" step="0.01">
             <span>-</span>
             <input type="number" name="max" value="${esc(String(max || ''))}" placeholder="max" min="0" step="0.01">
           </div>
         </div>
-        <label class="fb-check"><input type="checkbox" name="instock" value="1"${instock ? ' checked' : ''} onchange="this.form.submit()"> Sadece stokta</label>
-        <button class="btn btn-brand" type="submit">Uygula</button>
-        ${(q || activeCat || instock || min || max || sort !== 'new') ? `<a class="fb-clear" href="/">Temizle</a>` : ''}
+        <label class="fb-check"><input type="checkbox" name="instock" value="1"${instock ? ' checked' : ''} onchange="this.form.submit()"> ${esc(t('f_instock'))}</label>
+        <button class="btn btn-brand" type="submit">${esc(t('f_apply'))}</button>
+        ${(q || activeCat || instock || min || max || sort !== 'new') ? `<a class="fb-clear" href="/">${esc(t('f_clear'))}</a>` : ''}
       </form>`;
 
     const grid = products.length
       ? `<div class="grid">${products.map(p => productCard(ctx, p, true)).join('')}</div>`
-      : `<p class="empty">Bu filtrelere uygun urun bulunamadi. <a href="/">Filtreleri temizle &rarr;</a></p>`;
+      : `<p class="empty">${esc(t('f_no_results'))} <a href="/">${esc(t('f_clear_filters'))} &rarr;</a></p>`;
     return layout(ctx, `${hero}
       <div class="sect-h"><h2>${heading}</h2><span class="muted">${products.length} ${esc(t('n_products'))}</span></div>
       ${filterBar}
@@ -188,9 +188,9 @@ const pages = {
   favorites(ctx, { products }) {
     const grid = products.length
       ? `<div class="grid">${products.map(p => productCard(ctx, p, true)).join('')}</div>`
-      : `<p class="empty">Henuz favori urunun yok. Begendigin urunlerdeki ♡ kalbe basarak ekleyebilirsin. <a href="/">Urunlere goz at &rarr;</a></p>`;
+      : `<p class="empty">${esc(ctx.t('fav_empty'))} <a href="/">${esc(ctx.t('fav_browse'))} &rarr;</a></p>`;
     return layout(ctx, `
-      <div class="sect-h"><h2>♥ Favorilerim</h2><span class="muted">${products.length} urun</span></div>
+      <div class="sect-h"><h2>♥ ${esc(ctx.t('fav_mine'))}</h2><span class="muted">${products.length} ${esc(ctx.t('n_products'))}</span></div>
       ${grid}`);
   },
 
@@ -204,27 +204,27 @@ const pages = {
           <div class="review">
             <div class="rv-head">
               <span class="rv-name">${esc(r.user_name)}</span>
-              ${stars(r.rating)}
+              ${stars(ctx, r.rating)}
               <span class="muted small">${esc((r.created_at || '').slice(0, 10))}</span>
             </div>
             ${r.comment ? `<p class="rv-text">${esc(r.comment)}</p>` : ''}
           </div>`).join('')
-      : `<p class="empty">Henuz yorum yok. Ilk yorumu sen yap!</p>`;
+      : `<p class="empty">${esc(t('rv_none'))}</p>`;
 
     // Yorum formu (giris yapmis kullanici)
     let reviewForm;
     if (!ctx.user) {
-      reviewForm = `<p class="muted">Yorum yapmak icin <a href="/login">giris yap</a>.</p>`;
+      reviewForm = `<p class="muted">${esc(t('rv_login_pre'))} <a href="/login">${esc(t('rv_login_link'))}</a>.</p>`;
     } else {
       const cur = myReview ? myReview.rating : 0;
       const radios = [5, 4, 3, 2, 1].map(n =>
-        `<input type="radio" id="star${n}" name="rating" value="${n}"${cur === n ? ' checked' : ''}><label for="star${n}" title="${n} yildiz">★</label>`
+        `<input type="radio" id="star${n}" name="rating" value="${n}"${cur === n ? ' checked' : ''}><label for="star${n}" title="${n}">★</label>`
       ).join('');
       reviewForm = `
         <form action="/product/${p.id}/review" method="post" class="review-form">
           <div class="star-input">${radios}</div>
-          <textarea name="comment" rows="3" placeholder="Urun hakkinda ne dusunuyorsun? (istege bagli)">${myReview ? esc(myReview.comment) : ''}</textarea>
-          <button class="btn btn-brand" type="submit">${myReview ? 'Yorumu guncelle' : 'Yorum gonder'}</button>
+          <textarea name="comment" rows="3" placeholder="${esc(t('rv_ph'))}">${myReview ? esc(myReview.comment) : ''}</textarea>
+          <button class="btn btn-brand" type="submit">${myReview ? esc(t('rv_update')) : esc(t('rv_send'))}</button>
         </form>`;
     }
 
@@ -236,7 +236,7 @@ const pages = {
           ${p.cat_name ? `<span class="chip">${esc(p.cat_name)}</span>` : ''}
           <h1>${esc(p.name)}</h1>
           <a class="store-link" href="/store/${esc(p.store_slug)}">\u{1F3EA} ${esc(p.store_name)}</a>
-          <div class="pd-rating">${stars(avg, count)} ${favBtn(ctx, p.id, 'inline')}</div>
+          <div class="pd-rating">${stars(ctx, avg, count)} ${favBtn(ctx, p.id, 'inline')}</div>
           <div class="pd-price">${ctx.price(p.price_cents, p.currency)}</div>
           <p class="pd-desc">${p.description ? esc(p.description) : esc(t('no_desc'))}</p>
           <p class="muted small">${esc(t('stock'))}: ${p.stock}</p>
@@ -247,7 +247,7 @@ const pages = {
       </div>
 
       <div class="reviews-section">
-        <div class="sect-h"><h2>Degerlendirmeler ${count ? `(${count})` : ''}</h2></div>
+        <div class="sect-h"><h2>${esc(t('rv_title'))} ${count ? `(${count})` : ''}</h2></div>
         <div class="review-box">${reviewForm}</div>
         <div class="review-list">${reviewList}</div>
       </div>`);
@@ -327,42 +327,42 @@ const pages = {
   },
 
   sellerDashboard(ctx, { store, productCount }) {
+    const t = ctx.t;
     let notice = '';
-    if (!store) notice = '<p class="empty">Magaza kaydin bulunamadi.</p>';
-    else if (store.status === 'pending') notice = '<div class="notice warn">Magazan <strong>admin onayi</strong> bekliyor. Onaylanana kadar urunlerin vitrinde gorunmez, ama simdiden ekleyebilirsin.</div>';
-    else if (store.status === 'suspended') notice = '<div class="notice warn">Magazan askiya alinmis.</div>';
-    else notice = `<div class="notice ok">Magazan <strong>aktif</strong>. Vitrinin: <a href="/store/${esc(store.slug)}">/store/${esc(store.slug)}</a></div>`;
-    const statusTxt = store ? (store.status === 'active' ? 'Aktif' : store.status === 'pending' ? 'Onayda' : 'Askida') : '-';
+    if (!store) notice = `<p class="empty">${esc(t('sp_no_store'))}</p>`;
+    else if (store.status === 'pending') notice = `<div class="notice warn">${t('sp_pending')}</div>`;
+    else if (store.status === 'suspended') notice = `<div class="notice warn">${t('sp_suspended')}</div>`;
+    else notice = `<div class="notice ok">${t('sp_active')} <a href="/store/${esc(store.slug)}">/store/${esc(store.slug)}</a></div>`;
     return layout(ctx, `
       <div class="panel-head seller">
-        <div><h1>Satici Paneli</h1><p class="muted">Merhaba ${esc(ctx.user.name)} &middot; magazani buradan yonet.</p></div>
-        <a class="btn btn-brand" href="/seller/products/new">+ Yeni Urun</a>
+        <div><h1>${esc(t('seller_panel'))}</h1><p class="muted">${esc(t('sp_hello'))} ${esc(ctx.user.name)} &middot; ${esc(t('sp_manage'))}</p></div>
+        <a class="btn btn-brand" href="/seller/products/new">+ ${esc(t('sp_new_product'))}</a>
       </div>
       ${notice}
-      ${ctx.newOrders ? `<div class="notice neworder">\u{1F514} <strong>${ctx.newOrders} yeni siparisin</strong> var! <a href="/seller/orders">Siparisleri gor &rarr;</a></div>` : ''}
+      ${ctx.newOrders ? `<div class="notice neworder">\u{1F514} <strong>${ctx.newOrders} ${esc(t('sp_new_orders'))}</strong> <a href="/seller/orders">${esc(t('sp_see_orders'))} &rarr;</a></div>` : ''}
       ${store ? `<div class="stat-row">
-        <div class="stat"><div class="n">${productCount}</div><div class="l">Urunum</div></div>
-        <div class="stat${ctx.newOrders ? ' hot' : ''}"><div class="n">${ctx.newOrders}</div><div class="l">Yeni siparis</div></div>
-        <div class="stat"><div class="n">${statusTxt}</div><div class="l">Durum</div></div>
+        <div class="stat"><div class="n">${productCount}</div><div class="l">${esc(t('sp_stat_products'))}</div></div>
+        <div class="stat${ctx.newOrders ? ' hot' : ''}"><div class="n">${ctx.newOrders}</div><div class="l">${esc(t('sp_stat_neworder'))}</div></div>
+        <div class="stat"><div class="n">${esc(store.slug)}</div><div class="l">${esc(t('sp_stat_address'))}</div></div>
       </div>
       <div class="panel-links">
-        <a class="btn btn-ghost" href="/seller/products">Urunlerimi yonet</a>
-        <a class="btn btn-ghost nav-badge-wrap" href="/seller/orders">Gelen Siparisler${ctx.newOrders ? `<span class="nav-badge">${ctx.newOrders}</span>` : ''}</a>
-        ${store.status === 'active' ? `<a class="btn btn-ghost" href="/store/${esc(store.slug)}">Vitrinimi gor</a>` : ''}
+        <a class="btn btn-ghost" href="/seller/products">${esc(t('sp_manage_products'))}</a>
+        <a class="btn btn-ghost nav-badge-wrap" href="/seller/orders">${esc(t('sp_incoming'))}${ctx.newOrders ? `<span class="nav-badge">${ctx.newOrders}</span>` : ''}</a>
+        ${store.status === 'active' ? `<a class="btn btn-ghost" href="/store/${esc(store.slug)}">${esc(t('sp_view_store'))}</a>` : ''}
       </div>
       ${store.status === 'active' ? `
       <div class="auth-card" style="max-width:none;margin:18px 0 0">
-        <h3>\u{1F3EA} Magaza Sitem</h3>
-        <p class="muted small">Kendi markali vitrinin. Hem market icinde hem de kendi alt alan adinda yayinlanir (Shopist'teki gibi).</p>
+        <h3>\u{1F3EA} ${esc(t('sp_my_site'))}</h3>
+        <p class="muted small">${esc(t('sp_my_site_desc'))}</p>
         <ul class="store-urls">
-          <li><strong>Alt alan adi (canli):</strong> <code>${esc(store.slug)}.mooz.store</code> <span class="muted small">— site yayina alininca</span></li>
-          <li><strong>Simdi test et:</strong> <a href="http://${esc(store.slug)}.localhost:3000" target="_blank">${esc(store.slug)}.localhost:3000</a></li>
-          <li><strong>Market vitrini:</strong> <a href="/store/${esc(store.slug)}">/store/${esc(store.slug)}</a></li>
+          <li><strong>${esc(t('sp_subdomain'))}</strong> <code>${esc(store.slug)}.mooz.store</code> <span class="muted small">— ${esc(t('sp_when_live'))}</span></li>
+          <li><strong>${esc(t('sp_test_now'))}</strong> <a href="http://${esc(store.slug)}.localhost:3000" target="_blank">${esc(store.slug)}.localhost:3000</a></li>
+          <li><strong>${esc(t('sp_market_store'))}</strong> <a href="/store/${esc(store.slug)}">/store/${esc(store.slug)}</a></li>
         </ul>
         <form action="/seller/store" method="post">
-          <label>Magaza aciklamasi (vitrininde gorunur)</label>
-          <textarea name="description" rows="2" placeholder="Orn: Kaliteli mobilya, hizli teslimat">${esc(store.description || '')}</textarea>
-          <button class="btn btn-brand" type="submit" style="margin-top:10px">Kaydet</button>
+          <label>${esc(t('sp_store_desc_label'))}</label>
+          <textarea name="description" rows="2" placeholder="${esc(t('sp_store_desc_ph'))}">${esc(store.description || '')}</textarea>
+          <button class="btn btn-brand" type="submit" style="margin-top:10px">${esc(t('save'))}</button>
         </form>
       </div>` : ''}` : ''}`);
   },
@@ -580,17 +580,17 @@ const pages = {
 
     const couponBox = coupon ? `
       <div class="coupon-applied">
-        <span>\u{1F3F7} <strong>${esc(coupon.code)}</strong> — %${coupon.percent} indirim</span>
-        <form action="/cart/coupon/remove" method="post"><button class="link-danger" type="submit">Kaldir</button></form>
+        <span>\u{1F3F7} <strong>${esc(coupon.code)}</strong> — %${coupon.percent} ${esc(t('cp_off'))}</span>
+        <form action="/cart/coupon/remove" method="post"><button class="link-danger" type="submit">${esc(t('cp_remove'))}</button></form>
       </div>` : `
       <form action="/cart/coupon" method="post" class="coupon-form">
-        <input type="text" name="code" placeholder="Indirim kodu" maxlength="20">
-        <button class="btn btn-light" type="submit">Uygula</button>
+        <input type="text" name="code" placeholder="${esc(t('cp_ph'))}" maxlength="20">
+        <button class="btn btn-light" type="submit">${esc(t('cp_apply'))}</button>
       </form>`;
 
     const totalRows = coupon ? `
-      <div class="totrow"><span>Ara toplam</span><span>${money(gross, ctx.displayCur)}</span></div>
-      <div class="totrow discount"><span>Indirim (%${coupon.percent})</span><span>- ${money(discount, ctx.displayCur)}</span></div>
+      <div class="totrow"><span>${esc(t('cp_subtotal'))}</span><span>${money(gross, ctx.displayCur)}</span></div>
+      <div class="totrow discount"><span>${esc(t('cp_discount'))} (%${coupon.percent})</span><span>- ${money(discount, ctx.displayCur)}</span></div>
       <div class="totrow big"><span>${esc(t('total'))}</span><span>${money(net, ctx.displayCur)}</span></div>`
       : `<div class="totrow big"><span>${esc(t('total'))}</span><span>${money(gross, ctx.displayCur)}</span></div>`;
 
@@ -643,7 +643,7 @@ const pages = {
             const net = Math.round(gross * (100 - percent) / 100);
             if (!coupon) return `<div class="totrow big" style="margin-top:12px"><span>${esc(t('total'))}</span><span>${money(gross, ctx.displayCur)}</span></div>`;
             return `
-              <div class="totrow" style="margin-top:12px"><span>Ara toplam</span><span>${money(gross, ctx.displayCur)}</span></div>
+              <div class="totrow" style="margin-top:12px"><span>${esc(t('cp_subtotal'))}</span><span>${money(gross, ctx.displayCur)}</span></div>
               <div class="totrow discount"><span>\u{1F3F7} ${esc(coupon.code)} (%${coupon.percent})</span><span>- ${money(gross - net, ctx.displayCur)}</span></div>
               <div class="totrow big"><span>${esc(t('total'))}</span><span>${money(net, ctx.displayCur)}</span></div>`;
           })()}
@@ -691,32 +691,33 @@ const pages = {
   },
 
   sellerOrders(ctx, { sellerOrders, newCount }) {
+    const t = ctx.t;
     if (!sellerOrders.length) return layout(ctx, `
-      <div class="panel-head seller"><div><h1>Gelen Siparisler</h1><p class="muted">Henuz siparis yok.</p></div></div>
-      <p class="empty">Magazana siparis geldiginde burada gorunecek.</p>`);
+      <div class="panel-head seller"><div><h1>${esc(t('so_title'))}</h1><p class="muted">${esc(t('so_none_head'))}</p></div></div>
+      <p class="empty">${esc(t('so_none_body'))}</p>`);
     const cards = sellerOrders.map(so => {
       const items = so.items.map(it => `<div class="sum-line"><span>${esc(it.name)} × ${it.qty}</span><span>${money(it.price_cents * it.qty, it.currency)}</span></div>`).join('');
       const net = so.subtotal_cents - so.commission_cents;
       const btn = (val, label) => `<form action="/seller/orders/${so.id}/status" method="post" style="display:inline"><input type="hidden" name="status" value="${val}"><button class="btn btn-ghost" type="submit"${so.status === val ? ' disabled' : ''}>${label}</button></form>`;
       return `<div class="order-seller${so.seen ? '' : ' is-new'}">
-        <div class="os-head"><strong>Siparis #${so.order_id}</strong> ${so.seen ? '' : '<span class="badge new">YENI</span>'} ${soBadge(ctx.t, so.status)} <span class="muted small">${esc((so.order_date || '').slice(0, 16))} &middot; ${esc(so.buyer_name)}</span></div>
-        <div class="muted small">Teslimat: ${esc(so.address || '-')}</div>
+        <div class="os-head"><strong>${esc(t('order'))} #${so.order_id}</strong> ${so.seen ? '' : `<span class="badge new">${esc(t('so_badge_new'))}</span>`} ${soBadge(ctx.t, so.status)} <span class="muted small">${esc((so.order_date || '').slice(0, 16))} &middot; ${esc(so.buyer_name)}</span></div>
+        <div class="muted small">${esc(t('so_delivery'))}: ${esc(so.address || '-')}</div>
         ${items}
-        <div class="sum-line"><span>Ara toplam</span><span>${money(so.subtotal_cents, so.currency)}</span></div>
-        <div class="sum-line muted"><span>Komisyon (${Math.round((so.commission_cents / (so.subtotal_cents || 1)) * 100)}%)</span><span>- ${money(so.commission_cents, so.currency)}</span></div>
-        <div class="sum-line"><strong>Senin kazancin</strong><strong>${money(net, so.currency)}</strong></div>
-        <div class="os-actions">Durum: ${btn('hazirlaniyor', 'Hazirlaniyor')} ${btn('teslim', 'Teslim edildi')}</div>
+        <div class="sum-line"><span>${esc(t('cp_subtotal'))}</span><span>${money(so.subtotal_cents, so.currency)}</span></div>
+        <div class="sum-line muted"><span>${esc(t('so_commission'))} (${Math.round((so.commission_cents / (so.subtotal_cents || 1)) * 100)}%)</span><span>- ${money(so.commission_cents, so.currency)}</span></div>
+        <div class="sum-line"><strong>${esc(t('so_earning'))}</strong><strong>${money(net, so.currency)}</strong></div>
+        <div class="os-actions">${esc(t('so_status_label'))} ${btn('hazirlaniyor', esc(t('so_preparing')))} ${btn('teslim', esc(t('so_delivered')))}</div>
         <form action="/seller/orders/${so.id}/status" method="post" class="ship-form">
           <input type="hidden" name="status" value="kargoda">
-          <select name="carrier"><option value="">Kargo firmasi...</option>${Object.keys(shipping.CARRIERS).map(c => `<option value="${c}"${so.carrier === c ? ' selected' : ''}>${esc(shipping.CARRIERS[c].label)} (${shipping.CARRIERS[c].region})</option>`).join('')}</select>
-          <input name="tracking_no" placeholder="Takip no" value="${esc(so.tracking_no || '')}">
-          <button class="btn btn-ghost" type="submit">Kargoya ver</button>
+          <select name="carrier"><option value="">${esc(t('so_carrier_ph'))}</option>${Object.keys(shipping.CARRIERS).map(c => `<option value="${c}"${so.carrier === c ? ' selected' : ''}>${esc(shipping.CARRIERS[c].label)} (${shipping.CARRIERS[c].region})</option>`).join('')}</select>
+          <input name="tracking_no" placeholder="${esc(t('so_tracking_ph'))}" value="${esc(so.tracking_no || '')}">
+          <button class="btn btn-ghost" type="submit">${esc(t('so_ship_now'))}</button>
         </form>
-        ${so.tracking_no ? `<div class="muted small">\u{1F4E6} ${esc(shipping.carrierLabel(so.carrier))} &middot; Takip: ${esc(so.tracking_no)}</div>` : ''}
+        ${so.tracking_no ? `<div class="muted small">\u{1F4E6} ${esc(shipping.carrierLabel(so.carrier))} &middot; ${esc(t('so_tracking_ph'))}: ${esc(so.tracking_no)}</div>` : ''}
       </div>`;
     }).join('');
     return layout(ctx, `
-      <div class="panel-head seller"><div><h1>Gelen Siparisler</h1><p class="muted">${sellerOrders.length} siparis${newCount ? ` &middot; ${newCount} yeni` : ''}</p></div></div>
+      <div class="panel-head seller"><div><h1>${esc(t('so_title'))}</h1><p class="muted">${sellerOrders.length} ${esc(t('so_count'))}${newCount ? ` &middot; ${newCount} ${esc(t('so_new'))}` : ''}</p></div></div>
       ${cards}`);
   },
 
