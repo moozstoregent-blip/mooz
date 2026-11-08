@@ -147,7 +147,7 @@ function getCoupon(code) {
 }
 
 function requireLogin(ctx) {
-  if (!ctx.user) { ctx.flashMsg('Devam etmek icin giris yap.'); ctx.redirect('/login'); return false; }
+  if (!ctx.user) { ctx.flashMsg(ctx.t('fl_login_required')); ctx.redirect('/login'); return false; }
   return true;
 }
 
@@ -244,14 +244,14 @@ add('GET', '/product/:id', (ctx) => {
 add('POST', '/product/:id/review', (ctx) => {
   if (!requireLogin(ctx)) return;
   const prod = db.prepare('SELECT id FROM products WHERE id = ?').get(ctx.params.id);
-  if (!prod) { ctx.flashMsg('Urun bulunamadi.'); return ctx.redirect('/'); }
+  if (!prod) { ctx.flashMsg(ctx.t('fl_product_notfound')); return ctx.redirect('/'); }
   let rating = parseInt(ctx.body.rating, 10);
-  if (!(rating >= 1 && rating <= 5)) { ctx.flashMsg('Lutfen 1-5 arasi puan sec.'); return ctx.redirect('/product/' + prod.id); }
+  if (!(rating >= 1 && rating <= 5)) { ctx.flashMsg(ctx.t('fl_rating_range')); return ctx.redirect('/product/' + prod.id); }
   const comment = (ctx.body.comment || '').trim().slice(0, 1000);
   db.prepare(`INSERT INTO reviews (product_id, user_id, rating, comment) VALUES (?,?,?,?)
     ON CONFLICT(product_id, user_id) DO UPDATE SET rating = excluded.rating, comment = excluded.comment, created_at = datetime('now')`)
     .run(prod.id, ctx.user.id, rating, comment);
-  ctx.flashMsg('Yorumun eklendi, tesekkurler!');
+  ctx.flashMsg(ctx.t('fl_review_thanks'));
   ctx.redirect('/product/' + prod.id);
 });
 
@@ -261,14 +261,14 @@ add('POST', '/favorites/toggle', (ctx) => {
   const pid = parseInt(ctx.body.product_id, 10);
   const back = (ctx.body.back && ctx.body.back.startsWith('/')) ? ctx.body.back : '/';
   const prod = db.prepare('SELECT id FROM products WHERE id = ?').get(pid);
-  if (!prod) { ctx.flashMsg('Urun bulunamadi.'); return ctx.redirect(back); }
+  if (!prod) { ctx.flashMsg(ctx.t('fl_product_notfound')); return ctx.redirect(back); }
   const exists = db.prepare('SELECT id FROM favorites WHERE user_id = ? AND product_id = ?').get(ctx.user.id, pid);
   if (exists) {
     db.prepare('DELETE FROM favorites WHERE id = ?').run(exists.id);
-    ctx.flashMsg('Favorilerden cikarildi.');
+    ctx.flashMsg(ctx.t('fl_fav_removed'));
   } else {
     db.prepare('INSERT INTO favorites (user_id, product_id) VALUES (?,?)').run(ctx.user.id, pid);
-    ctx.flashMsg('Favorilere eklendi.');
+    ctx.flashMsg(ctx.t('fl_fav_added'));
   }
   ctx.redirect(back);
 });
@@ -303,9 +303,9 @@ add('GET', '/login', (ctx) => { ctx.title = 'Giris yap'; ctx.send(pages.login(ct
 
 add('POST', '/register', (ctx) => {
   const { name, email, password, role } = ctx.body;
-  if (!name || !email || !password) { ctx.flashMsg('Tum alanlari doldurun.'); return ctx.redirect('/register'); }
+  if (!name || !email || !password) { ctx.flashMsg(ctx.t('fl_fill_all')); return ctx.redirect('/register'); }
   if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) {
-    ctx.flashMsg('Bu e-posta zaten kayitli.'); return ctx.redirect('/register');
+    ctx.flashMsg(ctx.t('fl_email_exists')); return ctx.redirect('/register');
   }
   const accountRole = role === 'seller' ? 'seller' : 'buyer';
   const info = db.prepare('INSERT INTO users (name,email,password_hash,role) VALUES (?,?,?,?)')
@@ -317,14 +317,14 @@ add('POST', '/register', (ctx) => {
     db.prepare("INSERT INTO stores (user_id,name,slug,status) VALUES (?,?,?,'pending')").run(userId, name, slug);
   }
   ctx.login(userId);
-  ctx.flashMsg(accountRole === 'seller' ? 'Hos geldin! Magazan admin onayindan sonra yayinlanacak.' : 'Hos geldin!');
+  ctx.flashMsg(accountRole === 'seller' ? ctx.t('fl_welcome_seller') : ctx.t('fl_welcome'));
   ctx.redirect(accountRole === 'seller' ? '/seller' : '/');
 });
 
 add('POST', '/login', (ctx) => {
   const u = db.prepare('SELECT * FROM users WHERE email = ?').get(ctx.body.email || '');
   if (!u || !H.verifyPassword(ctx.body.password || '', u.password_hash)) {
-    ctx.flashMsg('E-posta veya sifre hatali.'); return ctx.redirect('/login');
+    ctx.flashMsg(ctx.t('fl_login_fail')); return ctx.redirect('/login');
   }
   ctx.login(u.id);
   ctx.redirect(u.role === 'admin' ? '/admin' : u.role === 'seller' ? '/seller' : '/');
@@ -368,7 +368,7 @@ add('GET', '/seller/products/new', (ctx) => {
 add('POST', '/seller/products', (ctx) => {
   if (!requireRole(ctx, 'seller')) return;
   const b = ctx.body;
-  if (!b.name || !b.price) { ctx.flashMsg('Urun adi ve fiyat zorunlu.'); return ctx.redirect('/seller/products/new'); }
+  if (!b.name || !b.price) { ctx.flashMsg(ctx.t('fl_product_req')); return ctx.redirect('/seller/products/new'); }
   const cents = Math.round(parseFloat(String(b.price).replace(',', '.')) * 100) || 0;
   // Dosya yuklendiyse onu kullan (data URI), yoksa URL alanini kabul et
   const uploaded = b.file_image_file || '';
@@ -379,7 +379,7 @@ add('POST', '/seller/products', (ctx) => {
     ctx.myStore.id, b.category_id || null, b.name, b.description || '', cents,
     config.currencies.includes(b.currency) ? b.currency : config.defaultCurrency,
     b.emoji || '\u{1F4E6}', parseInt(b.stock) || 0, imageUrl);
-  ctx.flashMsg('Urun eklendi.');
+  ctx.flashMsg(ctx.t('fl_product_added'));
   ctx.redirect('/seller/products');
 });
 
@@ -387,14 +387,14 @@ add('POST', '/seller/store', (ctx) => {
   if (!requireRole(ctx, 'seller')) return;
   db.prepare('UPDATE stores SET description = ? WHERE id = ?')
     .run((ctx.body.description || '').slice(0, 300), ctx.myStore.id);
-  ctx.flashMsg('Magaza bilgisi guncellendi.');
+  ctx.flashMsg(ctx.t('fl_store_updated'));
   ctx.redirect('/seller');
 });
 
 add('POST', '/seller/products/:id/delete', (ctx) => {
   if (!requireRole(ctx, 'seller')) return;
   db.prepare('DELETE FROM products WHERE id = ? AND store_id = ?').run(ctx.params.id, ctx.myStore.id);
-  ctx.flashMsg('Urun silindi.');
+  ctx.flashMsg(ctx.t('fl_product_deleted'));
   ctx.redirect('/seller/products');
 });
 
@@ -450,28 +450,28 @@ add('POST', '/admin/staff', (ctx) => {
   const email = (ctx.body.email || '').trim().toLowerCase();
   const pass = ctx.body.password || '';
   if (!name || !email || pass.length < 6) {
-    ctx.flashMsg('Ad, e-posta ve en az 6 karakter sifre gerekli.');
+    ctx.flashMsg(ctx.t('fl_staff_req'));
     return ctx.redirect('/admin/staff');
   }
   if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) {
-    ctx.flashMsg('Bu e-posta zaten kayitli.');
+    ctx.flashMsg(ctx.t('fl_email_exists'));
     return ctx.redirect('/admin/staff');
   }
   const chosen = PERM_KEYS.filter(k => ctx.body['perm_' + k]).join(',');
   db.prepare("INSERT INTO users (name,email,password_hash,role,permissions) VALUES (?,?,?,'admin',?)")
     .run(name, email, H.hashPassword(pass), chosen);
-  ctx.flashMsg('Personel eklendi: ' + email);
+  ctx.flashMsg(ctx.t('fl_staff_added') + ': ' + email);
   ctx.redirect('/admin/staff');
 });
 
 add('POST', '/admin/staff/:id/perms', (ctx) => {
   if (!requirePerm(ctx, 'staff')) return;
   const target = db.prepare("SELECT id,email,permissions FROM users WHERE id=? AND role='admin'").get(ctx.params.id);
-  if (!target) { ctx.flashMsg('Personel bulunamadi.'); return ctx.redirect('/admin/staff'); }
-  if (target.email === 'admin@mooz.store') { ctx.flashMsg('Ana sahip yetkileri degistirilemez.'); return ctx.redirect('/admin/staff'); }
+  if (!target) { ctx.flashMsg(ctx.t('fl_staff_notfound')); return ctx.redirect('/admin/staff'); }
+  if (target.email === 'admin@mooz.store') { ctx.flashMsg(ctx.t('fl_owner_perms_locked')); return ctx.redirect('/admin/staff'); }
   const chosen = PERM_KEYS.filter(k => ctx.body['perm_' + k]).join(',');
   db.prepare('UPDATE users SET permissions = ? WHERE id = ?').run(chosen, target.id);
-  ctx.flashMsg('Yetkiler guncellendi: ' + target.email);
+  ctx.flashMsg(ctx.t('fl_perms_updated') + ': ' + target.email);
   ctx.redirect('/admin/staff');
 });
 
@@ -487,11 +487,11 @@ add('POST', '/admin/coupons', (ctx) => {
   if (!requirePerm(ctx, 'marketing')) return;
   const code = String(ctx.body.code || '').trim().toUpperCase().replace(/\s+/g, '');
   const percent = parseInt(ctx.body.percent, 10);
-  if (!/^[A-Z0-9]{3,20}$/.test(code)) { ctx.flashMsg('Kod 3-20 karakter, sadece harf/rakam olmali.'); return ctx.redirect('/admin/coupons'); }
-  if (!(percent >= 1 && percent <= 90)) { ctx.flashMsg('Indirim yuzdesi 1-90 arasi olmali.'); return ctx.redirect('/admin/coupons'); }
-  if (db.prepare('SELECT id FROM coupons WHERE code = ?').get(code)) { ctx.flashMsg('Bu kod zaten var.'); return ctx.redirect('/admin/coupons'); }
+  if (!/^[A-Z0-9]{3,20}$/.test(code)) { ctx.flashMsg(ctx.t('fl_coupon_code_invalid')); return ctx.redirect('/admin/coupons'); }
+  if (!(percent >= 1 && percent <= 90)) { ctx.flashMsg(ctx.t('fl_coupon_pct_invalid')); return ctx.redirect('/admin/coupons'); }
+  if (db.prepare('SELECT id FROM coupons WHERE code = ?').get(code)) { ctx.flashMsg(ctx.t('fl_coupon_exists')); return ctx.redirect('/admin/coupons'); }
   db.prepare('INSERT INTO coupons (code,percent,active) VALUES (?,?,1)').run(code, percent);
-  ctx.flashMsg('Kupon olusturuldu: ' + code + ' (%' + percent + ')');
+  ctx.flashMsg(ctx.t('fl_coupon_created') + ': ' + code + ' (%' + percent + ')');
   ctx.redirect('/admin/coupons');
 });
 
@@ -505,18 +505,18 @@ add('POST', '/admin/coupons/:id/toggle', (ctx) => {
 add('POST', '/admin/coupons/:id/delete', (ctx) => {
   if (!requirePerm(ctx, 'marketing')) return;
   db.prepare('DELETE FROM coupons WHERE id = ?').run(ctx.params.id);
-  ctx.flashMsg('Kupon silindi.');
+  ctx.flashMsg(ctx.t('fl_coupon_deleted'));
   ctx.redirect('/admin/coupons');
 });
 
 add('POST', '/admin/staff/:id/delete', (ctx) => {
   if (!requirePerm(ctx, 'staff')) return;
   const target = db.prepare("SELECT id,email FROM users WHERE id=? AND role='admin'").get(ctx.params.id);
-  if (!target) { ctx.flashMsg('Personel bulunamadi.'); return ctx.redirect('/admin/staff'); }
-  if (target.email === 'admin@mooz.store') { ctx.flashMsg('Ana sahip hesabi silinemez.'); return ctx.redirect('/admin/staff'); }
-  if (target.id === ctx.user.id) { ctx.flashMsg('Kendi hesabinizi silemezsiniz.'); return ctx.redirect('/admin/staff'); }
+  if (!target) { ctx.flashMsg(ctx.t('fl_staff_notfound')); return ctx.redirect('/admin/staff'); }
+  if (target.email === 'admin@mooz.store') { ctx.flashMsg(ctx.t('fl_owner_del_locked')); return ctx.redirect('/admin/staff'); }
+  if (target.id === ctx.user.id) { ctx.flashMsg(ctx.t('fl_self_del')); return ctx.redirect('/admin/staff'); }
   db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
-  ctx.flashMsg('Personel silindi: ' + target.email);
+  ctx.flashMsg(ctx.t('fl_staff_deleted') + ': ' + target.email);
   ctx.redirect('/admin/staff');
 });
 
@@ -527,11 +527,11 @@ add('POST', '/cart/add', (ctx) => {
   if (!requireLogin(ctx)) return;
   const pid = ctx.body.product_id;
   const prod = db.prepare("SELECT p.id, p.stock FROM products p JOIN stores s ON s.id=p.store_id AND s.status='active' WHERE p.id=?").get(pid);
-  if (!prod) { ctx.flashMsg('Urun bulunamadi.'); return ctx.redirect('/'); }
-  if (prod.stock <= 0) { ctx.flashMsg('Bu urun tukendi.'); return ctx.redirect('/product/' + pid); }
+  if (!prod) { ctx.flashMsg(ctx.t('fl_product_notfound')); return ctx.redirect('/'); }
+  if (prod.stock <= 0) { ctx.flashMsg(ctx.t('fl_out_of_stock')); return ctx.redirect('/product/' + pid); }
   db.prepare(`INSERT INTO cart_items (user_id, product_id, qty) VALUES (?,?,1)
     ON CONFLICT(user_id, product_id) DO UPDATE SET qty = qty + 1`).run(ctx.user.id, pid);
-  ctx.flashMsg('Sepete eklendi.');
+  ctx.flashMsg(ctx.t('fl_cart_added'));
   ctx.redirect('/cart');
 });
 
@@ -559,22 +559,22 @@ add('POST', '/cart/coupon', (ctx) => {
   if (!requireLogin(ctx)) return;
   const code = String(ctx.body.code || '').trim().toUpperCase();
   const c = getCoupon(code);
-  if (!c) { ctx.flashMsg('Gecersiz veya pasif kupon kodu.'); ctx.setCookie('mooz_coupon=; Path=/; Max-Age=0'); }
-  else { ctx.setCookie('mooz_coupon=' + encodeURIComponent(code) + '; Path=/; Max-Age=86400'); ctx.flashMsg('Kupon uygulandi: %' + c.percent + ' indirim'); }
+  if (!c) { ctx.flashMsg(ctx.t('fl_coupon_invalid')); ctx.setCookie('mooz_coupon=; Path=/; Max-Age=0'); }
+  else { ctx.setCookie('mooz_coupon=' + encodeURIComponent(code) + '; Path=/; Max-Age=86400'); ctx.flashMsg(ctx.t('fl_coupon_applied') + ' %' + c.percent + ' ' + ctx.t('cp_off')); }
   ctx.redirect('/cart');
 });
 
 add('POST', '/cart/coupon/remove', (ctx) => {
   if (!requireLogin(ctx)) return;
   ctx.setCookie('mooz_coupon=; Path=/; Max-Age=0');
-  ctx.flashMsg('Kupon kaldirildi.');
+  ctx.flashMsg(ctx.t('fl_coupon_removed'));
   ctx.redirect('/cart');
 });
 
 add('GET', '/checkout', (ctx) => {
   if (!requireLogin(ctx)) return;
   const rows = cartRows(ctx.user.id);
-  if (!rows.length) { ctx.flashMsg('Sepetin bos.'); return ctx.redirect('/cart'); }
+  if (!rows.length) { ctx.flashMsg(ctx.t('fl_cart_empty')); return ctx.redirect('/cart'); }
   ctx.title = 'Odeme';
   ctx.send(pages.checkout(ctx, { rows, coupon: getCoupon(ctx.couponCode) }));
 });
@@ -582,7 +582,7 @@ add('GET', '/checkout', (ctx) => {
 add('POST', '/checkout', (ctx) => {
   if (!requireLogin(ctx)) return;
   const rows = cartRows(ctx.user.id);
-  if (!rows.length) { ctx.flashMsg('Sepetin bos.'); return ctx.redirect('/cart'); }
+  if (!rows.length) { ctx.flashMsg(ctx.t('fl_cart_empty')); return ctx.redirect('/cart'); }
   const b = ctx.body;
   const address = [b.name, b.address, ((b.zip || '') + ' ' + (b.city || '')).trim(), b.country].filter(x => x && x.trim()).join(', ');
 
@@ -592,7 +592,7 @@ add('POST', '/checkout', (ctx) => {
     const qty = Math.min(r.qty, r.stock);
     if (qty > 0) usable.push({ ...r, qty });
   });
-  if (!usable.length) { ctx.flashMsg('Sepetindeki urunler tukenmis.'); return ctx.redirect('/cart'); }
+  if (!usable.length) { ctx.flashMsg(ctx.t('fl_cart_sold_out')); return ctx.redirect('/cart'); }
 
   const orderCurrency = usable[0].currency; // MVP: baskin para birimi (demo verisi EUR)
   const grossTotal = usable.reduce((s, it) => s + it.price_cents * it.qty, 0);
@@ -605,7 +605,7 @@ add('POST', '/checkout', (ctx) => {
 
   // Odeme (su an simulasyon; gercek saglayici payment.js icinde baglanacak)
   const pay = payment.charge({ amountCents: orderTotal, currency: orderCurrency, method: b.method });
-  if (!pay.ok) { ctx.flashMsg('Odeme alinamadi, tekrar deneyin.'); return ctx.redirect('/checkout'); }
+  if (!pay.ok) { ctx.flashMsg(ctx.t('fl_pay_fail')); return ctx.redirect('/checkout'); }
 
   // Satici bazinda grupla (cok saticili sepet -> satici siparisleri)
   const byStore = {};
@@ -631,7 +631,7 @@ add('POST', '/checkout', (ctx) => {
   if (coupon) db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon.id);
   db.prepare('DELETE FROM cart_items WHERE user_id=?').run(ctx.user.id);
   ctx.setCookie('mooz_coupon=; Path=/; Max-Age=0');
-  ctx.flashMsg('Siparisin alindi! Odeme: ' + payment.methodLabel(pay.method) + ' (simulasyon)');
+  ctx.flashMsg(ctx.t('fl_order_placed') + ' ' + payment.methodLabel(pay.method) + ' (' + ctx.t('fl_simulation') + ')');
   ctx.redirect('/orders/' + orderId);
 });
 
