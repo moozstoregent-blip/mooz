@@ -37,6 +37,22 @@ function storeSlugFromHost(host) {
 }
 
 // --- Oturum / baglamyardimcilari ----------------------------------------
+// Tarayici dilini (Accept-Language) desteklenen dillerden birine esle
+function detectLang(header) {
+  if (!header) return null;
+  // Orn: "nl-BE,nl;q=0.9,fr;q=0.8,en;q=0.7"
+  const tags = header.split(',')
+    .map(part => {
+      const [tag, q] = part.trim().split(';q=');
+      return { lang: (tag || '').trim().toLowerCase().split('-')[0], q: q ? parseFloat(q) : 1 };
+    })
+    .sort((a, b) => b.q - a.q);
+  for (const t of tags) {
+    if (config.languages.includes(t.lang)) return t.lang;
+  }
+  return null;
+}
+
 function buildCtx(req, res) {
   const cookies = H.parseCookies(req.headers.cookie);
   let user = null, myStore = null;
@@ -65,7 +81,10 @@ function buildCtx(req, res) {
     ? db.prepare("SELECT COUNT(*) AS n FROM seller_orders WHERE store_id = ? AND seen = 0").get(myStore.id).n
     : 0;
 
-  const lang = config.languages.includes(cookies.mooz_lang) ? cookies.mooz_lang : config.defaultLang;
+  // Dil: cerez varsa manuel secim, yoksa tarayici dili (Accept-Language), o da yoksa varsayilan
+  const lang = config.languages.includes(cookies.mooz_lang)
+    ? cookies.mooz_lang
+    : (detectLang(req.headers['accept-language']) || config.defaultLang);
   const displayCur = config.currencies.includes(cookies.mooz_cur) ? cookies.mooz_cur : config.defaultCurrency;
 
   // Magaza alt alan adi mi? (<slug>.localhost / <slug>.mooz.store)
@@ -507,6 +526,54 @@ add('POST', '/admin/coupons/:id/delete', (ctx) => {
   db.prepare('DELETE FROM coupons WHERE id = ?').run(ctx.params.id);
   ctx.flashMsg(ctx.t('fl_coupon_deleted'));
   ctx.redirect('/admin/coupons');
+});
+
+// --- Odeme ayarlari (finance yetkisi) ---
+add('GET', '/admin/payments', (ctx) => {
+  if (!requirePerm(ctx, 'finance')) return;
+  ctx.title = 'Odeme Ayarlari';
+  ctx.send(pages.adminPayments(ctx, { configs: payment.availableConfigs(), providers: payment.PROVIDERS }));
+});
+
+add('POST', '/admin/payments/:provider/save', (ctx) => {
+  if (!requirePerm(ctx, 'finance')) return;
+  const p = ctx.params.provider;
+  if (!payment.PROVIDER_KEYS.includes(p)) { ctx.flashMsg(ctx.t('fl_product_notfound')); return ctx.redirect('/admin/payments'); }
+  const cur = payment.getConfig(p) || {};
+  const mode = ctx.body.mode === 'live' ? 'live' : 'test';
+  // Bos birakilan anahtar alani mevcut degeri korur (gizli secret tekrar girilmesin)
+  const apiKey = (ctx.body.api_key || '').trim() || cur.api_key || '';
+  const apiSecret = (ctx.body.api_secret || '').trim() || cur.api_secret || '';
+  db.prepare("UPDATE payment_providers SET mode=?, api_key=?, api_secret=?, updated_at=datetime('now') WHERE provider=?")
+    .run(mode, apiKey, apiSecret, p);
+  ctx.flashMsg(ctx.t('fl_pay_saved') + ' ' + payment.PROVIDERS[p].label);
+  ctx.redirect('/admin/payments');
+});
+
+add('POST', '/admin/payments/:provider/toggle', (ctx) => {
+  if (!requirePerm(ctx, 'finance')) return;
+  const p = ctx.params.provider;
+  if (!payment.PROVIDER_KEYS.includes(p)) { ctx.flashMsg(ctx.t('fl_product_notfound')); return ctx.redirect('/admin/payments'); }
+  const cur = payment.getConfig(p);
+  const turningOn = !(cur && cur.active);
+  if (turningOn && !payment.isConfigured(cur)) {
+    ctx.flashMsg(ctx.t('fl_pay_need_keys'));
+    return ctx.redirect('/admin/payments');
+  }
+  if (turningOn) {
+    // AB saglayicilarindan (mollie/stripe) ayni anda sadece biri aktif olabilir
+    const euPair = ['mollie', 'stripe'];
+    if (euPair.includes(p)) {
+      const other = euPair.find(x => x !== p);
+      db.prepare('UPDATE payment_providers SET active=0 WHERE provider=?').run(other);
+    }
+    db.prepare('UPDATE payment_providers SET active=1 WHERE provider=?').run(p);
+    ctx.flashMsg(ctx.t('fl_pay_activated') + ' ' + payment.PROVIDERS[p].label);
+  } else {
+    db.prepare('UPDATE payment_providers SET active=0 WHERE provider=?').run(p);
+    ctx.flashMsg(ctx.t('fl_pay_deactivated') + ' ' + payment.PROVIDERS[p].label);
+  }
+  ctx.redirect('/admin/payments');
 });
 
 add('POST', '/admin/staff/:id/delete', (ctx) => {
