@@ -116,7 +116,22 @@ db.exec(`
     used_count  INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS payment_providers (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider    TEXT NOT NULL UNIQUE,   -- iyzico | mollie | stripe
+    active      INTEGER NOT NULL DEFAULT 0,
+    mode        TEXT NOT NULL DEFAULT 'test',   -- test | live
+    api_key     TEXT DEFAULT '',
+    api_secret  TEXT DEFAULT '',
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
+
+// Odeme saglayici satirlarini garanti et (keyler bos; admin panelden girilir)
+['iyzico', 'mollie', 'stripe'].forEach(p => {
+  db.prepare('INSERT OR IGNORE INTO payment_providers (provider) VALUES (?)').run(p);
+});
 
 // --- Seed (sadece bos ise) ----------------------------------------------
 function seed() {
