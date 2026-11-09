@@ -422,6 +422,7 @@ const pages = {
     const navLinks = [];
     if (ctx.hasPerm('staff')) navLinks.push(`<a class="btn btn-light" href="/admin/staff">${esc(t('ad_nav_staff'))}</a>`);
     if (ctx.hasPerm('marketing')) navLinks.push(`<a class="btn btn-light" href="/admin/coupons">${esc(t('ad_nav_coupons'))}</a>`);
+    if (ctx.hasPerm('finance')) navLinks.push(`<a class="btn btn-light" href="/admin/payments">${esc(t('pay_nav'))}</a>`);
     const navBar = navLinks.length ? `<div class="admin-nav">${navLinks.join('')}</div>` : '';
 
     // Finans ozeti (sadece finance yetkisi)
@@ -544,6 +545,54 @@ const pages = {
       <div class="table-wrap"><table class="ptable">
         <thead><tr><th>${esc(t('th_code'))}</th><th>${esc(t('th_discount'))}</th><th>${esc(t('status'))}</th><th>${esc(t('th_usage'))}</th><th>${esc(t('th_action'))}</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`);
+  },
+
+  adminPayments(ctx, { configs, providers }) {
+    const t = ctx.t;
+    const cards = configs.map(c => {
+      const meta = providers[c.provider];
+      const configured = meta.needs.every(f => (c[f] || '').trim().length > 0);
+      const statusBadges = `
+        ${configured ? `<span class="badge ok">${esc(t('pay_configured'))}</span>` : `<span class="badge warn">${esc(t('pay_not_configured'))}</span>`}
+        ${c.active ? `<span class="badge ok">${esc(t('pay_active'))}</span>` : `<span class="badge off">${esc(t('pay_inactive'))}</span>`}`;
+      // Anahtar alanlari (gizli olanlar bos gosterilir; girilmisse "dolu" ipucu)
+      const fields = meta.needs.map(f => {
+        const filled = (c[f] || '').trim().length > 0;
+        const isSecret = f === 'api_secret';
+        return `<label>${esc(meta.fieldLabels[f] || f)}${filled ? ` <span class="muted small">(${esc(t('pay_configured'))})</span>` : ''}
+          <input type="${isSecret ? 'password' : 'text'}" name="${f}" placeholder="${filled ? '••••••••' : ''}" autocomplete="off"></label>`;
+      }).join('');
+      const toggleBtn = c.active
+        ? `<form action="/admin/payments/${c.provider}/toggle" method="post"><button class="btn btn-light" type="submit">${esc(t('pay_deactivate'))}</button></form>`
+        : `<form action="/admin/payments/${c.provider}/toggle" method="post"><button class="btn btn-brand" type="submit"${configured ? '' : ' disabled'}>${esc(t('pay_activate'))}</button></form>`;
+      return `<div class="pay-card">
+        <div class="pay-head">
+          <div><h3>${esc(meta.label)}</h3><span class="muted small">${esc(t('pay_region'))}: ${esc(meta.region)} · ${esc(t('pay_currency'))}: ${esc(meta.currencies.join(', '))}</span></div>
+          <div class="pay-badges">${statusBadges}</div>
+        </div>
+        <form action="/admin/payments/${c.provider}/save" method="post" class="pay-form">
+          ${fields}
+          <label>${esc(t('pay_mode'))}
+            <select name="mode">
+              <option value="test"${c.mode !== 'live' ? ' selected' : ''}>${esc(t('pay_mode_test'))}</option>
+              <option value="live"${c.mode === 'live' ? ' selected' : ''}>${esc(t('pay_mode_live'))}</option>
+            </select>
+          </label>
+          <div class="pay-actions">
+            <button class="btn btn-light" type="submit">${esc(t('pay_save'))}</button>
+            ${toggleBtn}
+            <a class="muted small" href="${esc(meta.docs)}" target="_blank" rel="noopener">${esc(t('pay_docs'))} ↗</a>
+          </div>
+        </form>
+      </div>`;
+    }).join('');
+
+    return layout(ctx, `
+      <div class="panel-head admin"><div><h1>${esc(t('pay_title'))}</h1><p class="muted">${esc(t('pay_sub'))}</p></div>
+        <a class="btn btn-light" href="/admin">&larr; ${esc(t('st_back'))}</a></div>
+      <div class="notice warn">${esc(t('pay_note'))}</div>
+      <p class="muted small">${esc(t('pay_secret_note'))}</p>
+      <div class="pay-grid">${cards}</div>`);
   },
 
   cart(ctx, { rows, coupon }) {
