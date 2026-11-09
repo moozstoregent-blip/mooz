@@ -287,6 +287,30 @@ const D = {
   fl_pay_fail: { tr: 'Odeme alinamadi, tekrar deneyin.', nl: 'Betaling mislukt, probeer opnieuw.', fr: 'Paiement echoue, reessayez.', en: 'Payment failed, try again.' },
   fl_order_placed: { tr: 'Siparisin alindi! Odeme:', nl: 'Bestelling ontvangen! Betaling:', fr: 'Commande reçue ! Paiement :', en: 'Order placed! Payment:' },
   fl_simulation: { tr: 'simulasyon', nl: 'simulatie', fr: 'simulation', en: 'simulation' },
+  fl_pay_saved: { tr: 'Kaydedildi:', nl: 'Opgeslagen:', fr: 'Enregistre :', en: 'Saved:' },
+  fl_pay_activated: { tr: 'Aktiflestirildi:', nl: 'Geactiveerd:', fr: 'Active :', en: 'Activated:' },
+  fl_pay_deactivated: { tr: 'Pasiflestirildi:', nl: 'Gedeactiveerd:', fr: 'Desactive :', en: 'Deactivated:' },
+  fl_pay_need_keys: { tr: 'Once API anahtarlarini girip kaydet.', nl: 'Voer eerst de API-sleutels in en sla op.', fr: "Entrez d'abord les cles API et enregistrez.", en: 'Enter and save the API keys first.' },
+
+  // --- Odeme ayarlari (admin) ---
+  pay_title: { tr: 'Odeme Ayarlari', nl: 'Betaalinstellingen', fr: 'Parametres de paiement', en: 'Payment settings' },
+  pay_sub: { tr: 'API anahtarlarini gir, modu sec ve aktiflestir. Para birimine gore otomatik yonlendirilir.', nl: 'Voer API-sleutels in, kies de modus en activeer. Automatisch gerouteerd per valuta.', fr: 'Entrez les cles API, choisissez le mode et activez. Routage auto par devise.', en: 'Enter API keys, pick the mode and activate. Auto-routed by currency.' },
+  pay_nav: { tr: 'Odeme ayarlari', nl: 'Betaalinstellingen', fr: 'Paiements', en: 'Payment settings' },
+  pay_region: { tr: 'Bolge', nl: 'Regio', fr: 'Region', en: 'Region' },
+  pay_currency: { tr: 'Para birimi', nl: 'Valuta', fr: 'Devise', en: 'Currency' },
+  pay_mode: { tr: 'Mod', nl: 'Modus', fr: 'Mode', en: 'Mode' },
+  pay_mode_test: { tr: 'Test', nl: 'Test', fr: 'Test', en: 'Test' },
+  pay_mode_live: { tr: 'Canli', nl: 'Live', fr: 'Reel', en: 'Live' },
+  pay_configured: { tr: 'Anahtarlar girildi', nl: 'Sleutels ingevoerd', fr: 'Cles saisies', en: 'Keys entered' },
+  pay_not_configured: { tr: 'Anahtar girilmedi', nl: 'Geen sleutels', fr: 'Pas de cles', en: 'No keys' },
+  pay_active: { tr: 'Aktif', nl: 'Actief', fr: 'Actif', en: 'Active' },
+  pay_inactive: { tr: 'Pasif', nl: 'Inactief', fr: 'Inactif', en: 'Inactive' },
+  pay_save: { tr: 'Kaydet', nl: 'Opslaan', fr: 'Enregistrer', en: 'Save' },
+  pay_activate: { tr: 'Aktiflestir', nl: 'Activeren', fr: 'Activer', en: 'Activate' },
+  pay_deactivate: { tr: 'Pasiflestir', nl: 'Deactiveren', fr: 'Desactiver', en: 'Deactivate' },
+  pay_secret_note: { tr: 'Guvenlik icin gizli anahtarlar panelde gosterilmez. Degistirmek icin yeni degeri yaz; bos birakirsan mevcut korunur.', nl: 'Geheime sleutels worden niet getoond. Vul een nieuwe waarde in om te wijzigen; leeg laten behoudt de huidige.', fr: 'Les cles secretes ne sont pas affichees. Saisissez une nouvelle valeur pour changer ; vide = inchange.', en: 'Secret keys are not shown. Enter a new value to change; leave blank to keep the current one.' },
+  pay_note: { tr: 'Not: Anahtar girilmeden odeme SIMULASYON calisir (gercek para cekilmez). Anahtarlar girilip test edilince gercek cekim devreye girer.', nl: 'Let op: zonder sleutels is betaling een SIMULATIE. Na invoer en test gaat de echte afschrijving live.', fr: 'Note : sans cles, le paiement est une SIMULATION. Apres saisie et test, le paiement reel sera actif.', en: 'Note: without keys, payment is a SIMULATION. Once keys are entered and tested, real charging goes live.' },
+  pay_docs: { tr: 'Dokuman', nl: 'Documentatie', fr: 'Documentation', en: 'Docs' },
 };
 
 function t(lang, key) {
