@@ -19,10 +19,12 @@ module.exports = {
   sessionSecret: process.env.SESSION_SECRET || 'mooz-dev-secret-degistir',
 
   // Global ayarlar
+  //  NOT: Turkiye simdilik askida. Dil secenekleri NL/FR/EN; para birimi EUR.
+  //  (Ileride TR acilirsa 'tr' ve 'TRY' buraya eklenir, iyzico otomatik gorunur.)
   defaultCurrency: 'EUR',
-  currencies: ['EUR', 'TRY'],
-  defaultLang: 'tr',
-  languages: ['tr', 'nl', 'fr', 'en'],
+  currencies: ['EUR'],
+  defaultLang: 'nl',                // tarayici dili eslesmezse varsayilan
+  languages: ['nl', 'fr', 'en'],
   // Yaklasik kur (gercekte canli kur servisinden alinacak). EUR baz.
   rates: { EUR: 1, TRY: 35 },
 
