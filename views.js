@@ -128,6 +128,20 @@ function soBadge(t, st) {
   return `<span class="badge warn">${esc(t('st_hazirlaniyor'))}</span>`;
 }
 
+// Siparis odeme durumu rozeti
+function orderBadge(t, st) {
+  if (st === 'odendi') return `<span class="badge ok">${esc(t('paid'))}</span>`;
+  if (st === 'iptal') return `<span class="badge off">${esc(t('ord_cancelled'))}</span>`;
+  return `<span class="badge warn">${esc(t('ord_pending'))}</span>`;
+}
+
+// Odeme saglayici/yontem etiketi
+function payProviderLabel(m) {
+  if (payment.PROVIDERS[m]) return payment.PROVIDERS[m].label;
+  if (m === 'simulation') return 'Simülasyon';
+  return payment.methodLabel(m || 'card');
+}
+
 // Sepet toplamini gosterim para birimine cevirip topla
 function totalsLine(ctx, rows) {
   const cents = rows.reduce((s, r) => s + convert(r.price_cents * r.qty, r.currency, ctx.displayCur), 0);
@@ -709,7 +723,7 @@ const pages = {
       <td><a href="/orders/${o.id}"><strong>#${o.id}</strong></a></td>
       <td class="small">${esc((o.created_at || '').slice(0, 16))}</td>
       <td><strong>${ctx.price(o.total_cents, o.currency)}</strong></td>
-      <td><span class="badge ok">${esc(t('paid'))}</span></td>
+      <td>${orderBadge(t, o.status)}</td>
       <td><a class="link-ok" href="/orders/${o.id}">${esc(t('detail'))}</a></td>
     </tr>`).join('');
     return layout(ctx, `<h1>${esc(t('orders'))}</h1>
@@ -736,7 +750,7 @@ const pages = {
       <a class="back" href="/orders">&larr; ${esc(t('orders'))}</a>
       <h1>${esc(t('order'))} #${order.id}</h1>
       <p class="muted small">${esc((order.created_at || '').slice(0, 16))} &middot; ${esc(order.address || '')}</p>
-      <div class="notice ok">${esc(t('paid'))} — ${esc(payment.methodLabel(order.payment_method || 'card'))}${order.payment_ref ? ' (' + esc(order.payment_ref) + ')' : ''} &middot; ${esc(t('split_note'))}</div>
+      <div class="notice ${order.status === 'odendi' ? 'ok' : order.status === 'iptal' ? 'warn' : 'warn'}">${orderBadge(t, order.status)} — ${esc(payProviderLabel(order.payment_method))}${order.payment_ref ? ' (' + esc(order.payment_ref) + ')' : ''} &middot; ${esc(t('split_note'))}</div>
       ${groups}
       <div class="cart-summary"><div class="totrow big"><span>${esc(t('grand_total'))}</span><span>${ctx.price(order.total_cents, order.currency)}</span></div></div>`);
   },
