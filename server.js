@@ -37,6 +37,14 @@ function storeSlugFromHost(host) {
 }
 
 // --- Oturum / baglamyardimcilari ----------------------------------------
+// Sitenin dis URL'i (saglayici yonlendirme/webhook icin). Render HTTPS verir.
+function baseUrl(req) {
+  if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/+$/, '');
+  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
+  const host = req.headers['host'];
+  return proto + '://' + host;
+}
+
 // Tarayici dilini (Accept-Language) desteklenen dillerden birine esle
 function detectLang(header) {
   if (!header) return null;
@@ -646,7 +654,27 @@ add('GET', '/checkout', (ctx) => {
   ctx.send(pages.checkout(ctx, { rows, coupon: getCoupon(ctx.couponCode) }));
 });
 
-add('POST', '/checkout', (ctx) => {
+// Siparisi "rezerve et": satici siparisleri + kalemler olustur, stok dus,
+// kupon say, sepeti temizle. (Siparis satiri onceden olusturulmus olmali.)
+function fulfillOrder(orderId, { usable, percent, coupon, userId }) {
+  const byStore = {};
+  usable.forEach(r => { (byStore[r.store_id] = byStore[r.store_id] || []).push(r); });
+  const insSO = db.prepare('INSERT INTO seller_orders (order_id,store_id,subtotal_cents,commission_cents,currency,status) VALUES (?,?,?,?,?,?)');
+  const insOI = db.prepare('INSERT INTO order_items (seller_order_id,product_id,name,price_cents,currency,qty) VALUES (?,?,?,?,?,?)');
+  const decStock = db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?');
+  Object.keys(byStore).forEach(storeId => {
+    const items = byStore[storeId];
+    const gross = items.reduce((s, it) => s + it.price_cents * it.qty, 0);
+    const subtotal = Math.round(gross * (100 - percent) / 100);
+    const commission = Math.round(subtotal * config.commissionRate);
+    const soId = Number(insSO.run(orderId, storeId, subtotal, commission, items[0].currency, 'hazirlaniyor').lastInsertRowid);
+    items.forEach(it => { insOI.run(soId, it.id, it.name, it.price_cents, it.currency, it.qty); decStock.run(it.qty, it.id); });
+  });
+  if (coupon) db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon.id);
+  db.prepare('DELETE FROM cart_items WHERE user_id = ?').run(userId);
+}
+
+add('POST', '/checkout', async (ctx) => {
   if (!requireLogin(ctx)) return;
   const rows = cartRows(ctx.user.id);
   if (!rows.length) { ctx.flashMsg(ctx.t('fl_cart_empty')); return ctx.redirect('/cart'); }
@@ -661,45 +689,108 @@ add('POST', '/checkout', (ctx) => {
   });
   if (!usable.length) { ctx.flashMsg(ctx.t('fl_cart_sold_out')); return ctx.redirect('/cart'); }
 
-  const orderCurrency = usable[0].currency; // MVP: baskin para birimi (demo verisi EUR)
+  const orderCurrency = usable[0].currency;
   const grossTotal = usable.reduce((s, it) => s + it.price_cents * it.qty, 0);
-
-  // Kupon indirimi (yuzde)
   const coupon = getCoupon(ctx.couponCode);
   const percent = coupon ? coupon.percent : 0;
   const orderTotal = Math.round(grossTotal * (100 - percent) / 100);
   const discountCents = grossTotal - orderTotal;
 
-  // Odeme (su an simulasyon; gercek saglayici payment.js icinde baglanacak)
-  const pay = payment.charge({ amountCents: orderTotal, currency: orderCurrency, method: b.method });
-  if (!pay.ok) { ctx.flashMsg(ctx.t('fl_pay_fail')); return ctx.redirect('/checkout'); }
+  const prov = payment.activeFor(orderCurrency);
 
-  // Satici bazinda grupla (cok saticili sepet -> satici siparisleri)
-  const byStore = {};
-  usable.forEach(r => { (byStore[r.store_id] = byStore[r.store_id] || []).push(r); });
+  // --- SIMULASYON (aktif saglayici yok) ---
+  if (!prov) {
+    const info = db.prepare('INSERT INTO orders (buyer_id,total_cents,currency,status,address,payment_method,payment_ref,discount_cents,coupon_code) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run(ctx.user.id, orderTotal, orderCurrency, 'odendi', address, 'simulation', payment.simRef(), discountCents, coupon ? coupon.code : '');
+    const orderId = Number(info.lastInsertRowid);
+    fulfillOrder(orderId, { usable, percent, coupon, userId: ctx.user.id });
+    ctx.setCookie('mooz_coupon=; Path=/; Max-Age=0');
+    ctx.flashMsg(ctx.t('fl_order_placed') + ' (' + ctx.t('fl_simulation') + ')');
+    return ctx.redirect('/orders/' + orderId);
+  }
 
-  const orderInfo = db.prepare('INSERT INTO orders (buyer_id,total_cents,currency,status,address,payment_method,payment_ref,discount_cents,coupon_code) VALUES (?,?,?,?,?,?,?,?,?)')
-    .run(ctx.user.id, orderTotal, orderCurrency, 'odendi', address, pay.method, pay.ref, discountCents, coupon ? coupon.code : '');
-  const orderId = Number(orderInfo.lastInsertRowid);
+  // --- GERCEK SAGLAYICI (Mollie/Stripe) ---
+  // 1) Once "beklemede" siparis satiri olustur (id lazim), henuz stok dusme
+  const info = db.prepare('INSERT INTO orders (buyer_id,total_cents,currency,status,address,payment_method,payment_ref,discount_cents,coupon_code) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(ctx.user.id, orderTotal, orderCurrency, 'pending', address, prov.provider, '', discountCents, coupon ? coupon.code : '');
+  const orderId = Number(info.lastInsertRowid);
 
-  const insSO = db.prepare('INSERT INTO seller_orders (order_id,store_id,subtotal_cents,commission_cents,currency,status) VALUES (?,?,?,?,?,?)');
-  const insOI = db.prepare('INSERT INTO order_items (seller_order_id,product_id,name,price_cents,currency,qty) VALUES (?,?,?,?,?,?)');
-  const decStock = db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?');
-
-  Object.keys(byStore).forEach(storeId => {
-    const items = byStore[storeId];
-    const gross = items.reduce((s, it) => s + it.price_cents * it.qty, 0);
-    const subtotal = Math.round(gross * (100 - percent) / 100); // indirimli
-    const commission = Math.round(subtotal * config.commissionRate);
-    const soId = Number(insSO.run(orderId, storeId, subtotal, commission, items[0].currency, 'hazirlaniyor').lastInsertRowid);
-    items.forEach(it => { insOI.run(soId, it.id, it.name, it.price_cents, it.currency, it.qty); decStock.run(it.qty, it.id); });
+  // 2) Saglayicida odeme oturumu ac
+  const base = baseUrl(ctx.req);
+  const r = await payment.createPayment({
+    orderId, amountCents: orderTotal, currency: orderCurrency,
+    description: config.brand.name + ' #' + orderId,
+    returnUrl: base + '/payment/return?order=' + orderId,
+    webhookUrl: base + '/payment/webhook/' + prov.provider,
   });
 
-  if (coupon) db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE id = ?').run(coupon.id);
-  db.prepare('DELETE FROM cart_items WHERE user_id=?').run(ctx.user.id);
+  if (!r.ok || !r.checkoutUrl) {
+    db.prepare('DELETE FROM orders WHERE id = ?').run(orderId); // sepet/stok korunur
+    ctx.flashMsg(ctx.t('fl_pay_fail') + (r.error ? ' (' + r.error + ')' : ''));
+    return ctx.redirect('/checkout');
+  }
+
+  // 3) Odeme ok -> rezerve et, referansi kaydet, kullaniciyi odeme sayfasina yonlendir
+  db.prepare('UPDATE orders SET payment_ref = ? WHERE id = ?').run(r.providerRef, orderId);
+  fulfillOrder(orderId, { usable, percent, coupon, userId: ctx.user.id });
   ctx.setCookie('mooz_coupon=; Path=/; Max-Age=0');
-  ctx.flashMsg(ctx.t('fl_order_placed') + ' ' + payment.methodLabel(pay.method) + ' (' + ctx.t('fl_simulation') + ')');
-  ctx.redirect('/orders/' + orderId);
+  ctx.redirect(r.checkoutUrl);
+});
+
+// Siparisi "odendi" yap (beklemedeyse). Idempotent.
+function markOrderPaid(orderId) {
+  const o = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  if (!o || o.status !== 'pending') return false;
+  db.prepare("UPDATE orders SET status = 'odendi' WHERE id = ?").run(orderId);
+  return true;
+}
+// Siparisi iptal et + stok iade (beklemedeyse). Idempotent.
+function cancelOrder(orderId) {
+  const o = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+  if (!o || o.status !== 'pending') return false;
+  const items = db.prepare('SELECT oi.product_id, oi.qty FROM order_items oi JOIN seller_orders so ON so.id = oi.seller_order_id WHERE so.order_id = ?').all(orderId);
+  const inc = db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?');
+  items.forEach(it => { if (it.product_id) inc.run(it.qty, it.product_id); });
+  db.prepare("UPDATE orders SET status = 'iptal' WHERE id = ?").run(orderId);
+  return true;
+}
+
+// Saglayicidan durum sorgulayip siparisi sonlandir -> 'paid'|'failed'|'pending'
+async function reconcileOrder(order) {
+  if (!order || order.status !== 'pending') return order ? order.status : 'unknown';
+  const st = await payment.checkStatus(order.payment_method, order.payment_ref);
+  if (st === 'paid') { markOrderPaid(order.id); return 'paid'; }
+  if (st === 'failed') { cancelOrder(order.id); return 'failed'; }
+  return 'pending';
+}
+
+// Odeme donus sayfasi (kullanici saglayicidan geri doner)
+add('GET', '/payment/return', async (ctx) => {
+  if (!requireLogin(ctx)) return;
+  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(ctx.query.order);
+  if (!order || order.buyer_id !== ctx.user.id) { ctx.title = 'Bulunamadi'; return ctx.send(pages.notFound(ctx), 404); }
+  const result = await reconcileOrder(order);
+  const provLabel = (payment.PROVIDERS[order.payment_method] && payment.PROVIDERS[order.payment_method].label) || order.payment_method;
+  if (result === 'paid') ctx.flashMsg(ctx.t('fl_order_placed') + ' ' + provLabel);
+  else if (result === 'failed') ctx.flashMsg(ctx.t('fl_pay_fail'));
+  ctx.redirect('/orders/' + order.id);
+});
+
+// Saglayici webhook'u (odeme sonucunu dogrular). Kimlik: saglayici API'sinden teyit.
+add('POST', '/payment/webhook/:provider', async (ctx) => {
+  const provider = ctx.params.provider;
+  let ref = '';
+  if (provider === 'mollie') {
+    ref = (ctx.body && ctx.body.id) || '';
+  } else if (provider === 'stripe') {
+    try { const ev = JSON.parse(ctx.rawBody || '{}'); ref = ev.data && ev.data.object && ev.data.object.id; } catch (_) { ref = ''; }
+  }
+  if (ref) {
+    const order = db.prepare('SELECT * FROM orders WHERE payment_ref = ? AND payment_method = ?').get(ref, provider);
+    if (order) await reconcileOrder(order);
+  }
+  ctx.res.writeHead(200, { 'Content-Type': 'text/plain' });
+  ctx.res.end('ok');
 });
 
 add('GET', '/orders', (ctx) => {
@@ -772,15 +863,19 @@ const server = http.createServer((req, res) => {
 
   const match = routes.find(r => r.method === req.method && r.rx.test(urlPath));
 
-  const run = (body) => {
+  const run = (body, raw) => {
     const ctx = buildCtx(req, res);
     ctx.query = qs.parse(req.url.split('?')[1] || '');
     ctx.body = body || {};
+    ctx.rawBody = raw || '';
     if (!match) { ctx.title = 'Bulunamadi'; return ctx.send(pages.notFound(ctx), 404); }
     const m = urlPath.match(match.rx);
     match.keys.forEach((k, i) => { ctx.params[k] = decodeURIComponent(m[i + 1]); });
-    try { match.handler(ctx); }
-    catch (e) { console.error(e); res.writeHead(500); res.end('Sunucu hatasi'); }
+    // Handler sync veya async olabilir; her iki durumda da hatayi yakala
+    Promise.resolve().then(() => match.handler(ctx)).catch((e) => {
+      console.error(e);
+      if (!res.headersSent) { res.writeHead(500); res.end('Sunucu hatasi'); }
+    });
   };
 
   if (req.method === 'POST') {
@@ -791,12 +886,13 @@ const server = http.createServer((req, res) => {
     req.on('data', c => { size += c.length; if (size > limit) { req.destroy(); return; } chunks.push(c); });
     req.on('end', () => {
       const buf = Buffer.concat(chunks);
+      const raw = buf.toString('utf8');
       if (ctype.startsWith('multipart/form-data')) {
         const m = ctype.match(/boundary=(?:"([^"]+)"|([^;]+))/);
         const boundary = m ? (m[1] || m[2]).trim() : '';
-        run(parseMultipart(buf, boundary));
+        run(parseMultipart(buf, boundary), raw);
       } else {
-        run(qs.parse(buf.toString('utf8')));
+        run(qs.parse(raw), raw);
       }
     });
   } else {
