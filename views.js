@@ -594,10 +594,12 @@ const pages = {
           </label>
           <div class="pay-actions">
             <button class="btn btn-light" type="submit">${esc(t('pay_save'))}</button>
-            ${toggleBtn}
-            <a class="muted small" href="${esc(meta.docs)}" target="_blank" rel="noopener">${esc(t('pay_docs'))} ↗</a>
           </div>
         </form>
+        <div class="pay-actions">
+          ${toggleBtn}
+          <a class="muted small" href="${esc(meta.docs)}" target="_blank" rel="noopener">${esc(t('pay_docs'))} ↗</a>
+        </div>
       </div>`;
     }).join('');
 
