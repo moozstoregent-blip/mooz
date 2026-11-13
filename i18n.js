@@ -71,6 +71,8 @@ const D = {
   status: { tr: 'Durum', nl: 'Status', fr: 'Statut', en: 'Status' },
   detail: { tr: 'Detay', nl: 'Details', fr: 'Details', en: 'Details' },
   paid: { tr: 'Odendi', nl: 'Betaald', fr: 'Paye', en: 'Paid' },
+  ord_pending: { tr: 'Odeme bekleniyor', nl: 'Wachten op betaling', fr: 'En attente de paiement', en: 'Awaiting payment' },
+  ord_cancelled: { tr: 'Iptal edildi', nl: 'Geannuleerd', fr: 'Annulee', en: 'Cancelled' },
   cargo: { tr: 'Kargo', nl: 'Verzending', fr: 'Livraison', en: 'Shipping' },
   subtotal: { tr: 'Ara toplam', nl: 'Subtotaal', fr: 'Sous-total', en: 'Subtotal' },
   grand_total: { tr: 'Genel toplam', nl: 'Totaal', fr: 'Total general', en: 'Grand total' },
