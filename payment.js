@@ -22,6 +22,32 @@
 
 const db = require('./db');
 const config = require('./config');
+const https = require('node:https');
+
+// --- Basit HTTPS yardimcisi (Promise, sifir bagimlilik) ------------------
+function httpsRequest(method, url, headers, body) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const data = body == null ? null : (typeof body === 'string' ? body : JSON.stringify(body));
+    const opts = {
+      method, hostname: u.hostname, path: u.pathname + u.search,
+      headers: Object.assign({}, headers),
+    };
+    if (data != null) opts.headers['Content-Length'] = Buffer.byteLength(data);
+    const req = https.request(opts, (res) => {
+      let buf = '';
+      res.on('data', (c) => { buf += c; });
+      res.on('end', () => {
+        let json = null;
+        try { json = buf ? JSON.parse(buf) : null; } catch (_) { /* json degil */ }
+        resolve({ status: res.statusCode, body: json, raw: buf });
+      });
+    });
+    req.on('error', reject);
+    if (data != null) req.write(data);
+    req.end();
+  });
+}
 
 // Odeme yontemleri (checkout secimi)
 const METHODS = {
@@ -91,49 +117,100 @@ function activeFor(currency) {
   return candidates[0] || null;
 }
 
-// --- Gercek saglayici cagrisi (keyler girilince devreye girer) ------------
-// Not: Mollie/Stripe/iyzico canli cekimi, kullaniciyi saglayicinin odeme
-// sayfasina yonlendirip webhook ile dogrulamayi gerektirir. Anahtarlar
-// girilip test edilince bu fonksiyonlar node:https ile tamamlanacak.
+// --- Gercek saglayici cagrilari (node:https) ------------------------------
+// Her saglayici icin: createPayment -> {ok, checkoutUrl, providerRef}
+//                     fetchStatus  -> 'paid' | 'open' | 'failed' | ...
 const REAL = {
-  iyzico(cfg, { amountCents, currency, method }) {
-    // TODO: iyzico CreatePayment / 3DS baslat (HMAC imzali REST cagrisi)
-    return simulated('iyzico', cfg.mode, method);
+  // ----- Mollie (https://docs.mollie.com) -----
+  async mollie_create(cfg, p) {
+    const res = await httpsRequest('POST', 'https://api.mollie.com/v2/payments',
+      { Authorization: 'Bearer ' + cfg.api_key, 'Content-Type': 'application/json' },
+      {
+        amount: { currency: p.currency, value: (p.amountCents / 100).toFixed(2) },
+        description: p.description,
+        redirectUrl: p.returnUrl,
+        webhookUrl: p.webhookUrl,
+        metadata: { order_id: String(p.orderId) },
+      });
+    const href = res.body && res.body._links && res.body._links.checkout && res.body._links.checkout.href;
+    if (res.status >= 200 && res.status < 300 && href) {
+      return { ok: true, checkoutUrl: href, providerRef: res.body.id };
+    }
+    return { ok: false, error: (res.body && res.body.detail) || ('Mollie HTTP ' + res.status) };
   },
-  mollie(cfg, { amountCents, currency, method }) {
-    // TODO: POST https://api.mollie.com/v2/payments (Bearer cfg.api_key) -> checkout url
-    return simulated('mollie', cfg.mode, method);
+  async mollie_status(cfg, ref) {
+    const res = await httpsRequest('GET', 'https://api.mollie.com/v2/payments/' + encodeURIComponent(ref),
+      { Authorization: 'Bearer ' + cfg.api_key });
+    return (res.body && res.body.status) || 'unknown'; // paid|open|pending|failed|canceled|expired
   },
-  stripe(cfg, { amountCents, currency, method }) {
-    // TODO: POST https://api.stripe.com/v1/checkout/sessions (Bearer cfg.api_secret)
-    return simulated('stripe', cfg.mode, method);
+
+  // ----- Stripe (https://stripe.com/docs) -----
+  async stripe_create(cfg, p) {
+    const form = new URLSearchParams();
+    form.set('mode', 'payment');
+    form.set('success_url', p.returnUrl);
+    form.set('cancel_url', p.returnUrl);
+    form.set('client_reference_id', String(p.orderId));
+    form.set('metadata[order_id]', String(p.orderId));
+    ['card', 'bancontact', 'ideal'].forEach((m) => form.append('payment_method_types[]', m));
+    form.set('line_items[0][price_data][currency]', p.currency.toLowerCase());
+    form.set('line_items[0][price_data][product_data][name]', p.description);
+    form.set('line_items[0][price_data][unit_amount]', String(p.amountCents));
+    form.set('line_items[0][quantity]', '1');
+    const res = await httpsRequest('POST', 'https://api.stripe.com/v1/checkout/sessions',
+      { Authorization: 'Bearer ' + cfg.api_secret, 'Content-Type': 'application/x-www-form-urlencoded' },
+      form.toString());
+    if (res.status >= 200 && res.status < 300 && res.body && res.body.url) {
+      return { ok: true, checkoutUrl: res.body.url, providerRef: res.body.id };
+    }
+    return { ok: false, error: (res.body && res.body.error && res.body.error.message) || ('Stripe HTTP ' + res.status) };
+  },
+  async stripe_status(cfg, ref) {
+    const res = await httpsRequest('GET', 'https://api.stripe.com/v1/checkout/sessions/' + encodeURIComponent(ref),
+      { Authorization: 'Bearer ' + cfg.api_secret });
+    if (!res.body) return 'unknown';
+    if (res.body.payment_status === 'paid') return 'paid';
+    if (res.body.status === 'expired') return 'expired';
+    return 'open';
   },
 };
 
-function simulated(provider, mode, method) {
-  return {
-    ok: true,
-    method,
-    provider,
-    mode: mode || 'test',
-    ref: (provider === 'simulation' ? 'SIM' : provider.toUpperCase().slice(0, 3)) + '-' +
-      Date.now().toString(36).toUpperCase(),
-    simulated: true,
-  };
+// Durum normalizasyonu: saglayici durumu -> paid | pending | failed
+function normalizeStatus(s) {
+  if (s === 'paid') return 'paid';
+  if (['failed', 'canceled', 'cancelled', 'expired'].includes(s)) return 'failed';
+  return 'pending'; // open, pending, unknown, authorized...
 }
 
-// Odemeyi al: para birimine gore saglayiciya yonlendir, yoksa simulasyon
-function charge({ amountCents, currency, method }) {
-  if (!isValidMethod(method)) method = 'card';
-  const prov = activeFor(currency);
-  if (!prov) return simulated('simulation', 'sim', method);
+// Odeme oturumu baslat (aktif saglayiciya gore). Saglayici yoksa simulasyon.
+// p: { orderId, amountCents, currency, description, returnUrl, webhookUrl }
+async function createPayment(p) {
+  const prov = activeFor(p.currency);
+  if (!prov) return { ok: true, simulated: true, provider: 'simulation' };
   try {
-    return REAL[prov.provider](prov, { amountCents, currency, method });
+    const r = await REAL[prov.provider + '_create'](prov, p);
+    return Object.assign({ provider: prov.provider, simulated: false }, r);
   } catch (e) {
-    console.error('Odeme saglayici hatasi:', e.message);
-    return { ok: false, error: e.message };
+    console.error('Odeme olusturma hatasi:', e.message);
+    return { ok: false, error: e.message, provider: prov.provider };
   }
 }
+
+// Bir odemenin guncel durumunu saglayicidan sorgula -> 'paid'|'pending'|'failed'
+async function checkStatus(providerName, providerRef) {
+  const cfg = getConfig(providerName);
+  if (!cfg || !REAL[providerName + '_status']) return 'pending';
+  try {
+    const s = await REAL[providerName + '_status'](cfg, providerRef);
+    return normalizeStatus(s);
+  } catch (e) {
+    console.error('Odeme durum hatasi:', e.message);
+    return 'pending';
+  }
+}
+
+// Simulasyon referansi (aktif saglayici yokken)
+function simRef() { return 'SIM-' + Date.now().toString(36).toUpperCase(); }
 
 // Admin paneli icin durum ozeti
 function statusSummary() {
@@ -148,6 +225,7 @@ function statusSummary() {
 }
 
 module.exports = {
-  METHODS, methodLabel, isValidMethod, charge,
+  METHODS, methodLabel, isValidMethod,
+  createPayment, checkStatus, normalizeStatus, simRef,
   PROVIDERS, PROVIDER_KEYS, getConfig, allConfigs, availableConfigs, isConfigured, activeFor, statusSummary,
 };
