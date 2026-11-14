@@ -313,6 +313,7 @@ const D = {
   pay_secret_note: { tr: 'Guvenlik icin gizli anahtarlar panelde gosterilmez. Degistirmek icin yeni degeri yaz; bos birakirsan mevcut korunur.', nl: 'Geheime sleutels worden niet getoond. Vul een nieuwe waarde in om te wijzigen; leeg laten behoudt de huidige.', fr: 'Les cles secretes ne sont pas affichees. Saisissez une nouvelle valeur pour changer ; vide = inchange.', en: 'Secret keys are not shown. Enter a new value to change; leave blank to keep the current one.' },
   pay_note: { tr: 'Not: Anahtar girilmeden odeme SIMULASYON calisir (gercek para cekilmez). Anahtarlar girilip test edilince gercek cekim devreye girer.', nl: 'Let op: zonder sleutels is betaling een SIMULATIE. Na invoer en test gaat de echte afschrijving live.', fr: 'Note : sans cles, le paiement est une SIMULATION. Apres saisie et test, le paiement reel sera actif.', en: 'Note: without keys, payment is a SIMULATION. Once keys are entered and tested, real charging goes live.' },
   pay_docs: { tr: 'Dokuman', nl: 'Documentatie', fr: 'Documentation', en: 'Docs' },
+  pay_env: { tr: 'Render ortam degiskeninden yonetiliyor (kalici)', nl: 'Beheerd via Render-omgevingsvariabele (permanent)', fr: "Gere via une variable d'environnement Render (permanent)", en: 'Managed via Render environment variable (persistent)' },
 };
 
 function t(lang, key) {
