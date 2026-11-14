@@ -580,27 +580,32 @@ const pages = {
       const toggleBtn = c.active
         ? `<form action="/admin/payments/${c.provider}/toggle" method="post"><button class="btn btn-light" type="submit">${esc(t('pay_deactivate'))}</button></form>`
         : `<form action="/admin/payments/${c.provider}/toggle" method="post"><button class="btn btn-brand" type="submit"${configured ? '' : ' disabled'}>${esc(t('pay_activate'))}</button></form>`;
+
+      // Ortam degiskeninden yonetiliyorsa: salt-okunur bilgi goster (kalici)
+      const body = c._fromEnv
+        ? `<div class="notice ok" style="margin-top:12px">✓ ${esc(t('pay_env'))}<br><span class="muted small">${esc(t('pay_mode'))}: ${esc(c.mode === 'live' ? t('pay_mode_live') : t('pay_mode_test'))}</span></div>
+           <div class="pay-actions"><a class="muted small" href="${esc(meta.docs)}" target="_blank" rel="noopener">${esc(t('pay_docs'))} ↗</a></div>`
+        : `<form action="/admin/payments/${c.provider}/save" method="post" class="pay-form">
+             ${fields}
+             <label>${esc(t('pay_mode'))}
+               <select name="mode">
+                 <option value="test"${c.mode !== 'live' ? ' selected' : ''}>${esc(t('pay_mode_test'))}</option>
+                 <option value="live"${c.mode === 'live' ? ' selected' : ''}>${esc(t('pay_mode_live'))}</option>
+               </select>
+             </label>
+             <div class="pay-actions"><button class="btn btn-light" type="submit">${esc(t('pay_save'))}</button></div>
+           </form>
+           <div class="pay-actions">
+             ${toggleBtn}
+             <a class="muted small" href="${esc(meta.docs)}" target="_blank" rel="noopener">${esc(t('pay_docs'))} ↗</a>
+           </div>`;
+
       return `<div class="pay-card">
         <div class="pay-head">
           <div><h3>${esc(meta.label)}</h3><span class="muted small">${esc(t('pay_region'))}: ${esc(meta.region)} · ${esc(t('pay_currency'))}: ${esc(meta.currencies.join(', '))}</span></div>
           <div class="pay-badges">${statusBadges}</div>
         </div>
-        <form action="/admin/payments/${c.provider}/save" method="post" class="pay-form">
-          ${fields}
-          <label>${esc(t('pay_mode'))}
-            <select name="mode">
-              <option value="test"${c.mode !== 'live' ? ' selected' : ''}>${esc(t('pay_mode_test'))}</option>
-              <option value="live"${c.mode === 'live' ? ' selected' : ''}>${esc(t('pay_mode_live'))}</option>
-            </select>
-          </label>
-          <div class="pay-actions">
-            <button class="btn btn-light" type="submit">${esc(t('pay_save'))}</button>
-          </div>
-        </form>
-        <div class="pay-actions">
-          ${toggleBtn}
-          <a class="muted small" href="${esc(meta.docs)}" target="_blank" rel="noopener">${esc(t('pay_docs'))} ↗</a>
-        </div>
+        ${body}
       </div>`;
     }).join('');
 
