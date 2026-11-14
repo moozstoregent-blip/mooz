@@ -572,9 +572,10 @@ const pages = {
       // Anahtar alanlari (gizli olanlar bos gosterilir; girilmisse "dolu" ipucu)
       const fields = meta.needs.map(f => {
         const filled = (c[f] || '').trim().length > 0;
-        const isSecret = f === 'api_secret';
+        // Metin kutusu (sifre degil): tarayici parola otomatik-doldurmasini onler,
+        // ve yapistirdigin anahtari gorebilirsin.
         return `<label>${esc(meta.fieldLabels[f] || f)}${filled ? ` <span class="muted small">(${esc(t('pay_configured'))})</span>` : ''}
-          <input type="${isSecret ? 'password' : 'text'}" name="${f}" placeholder="${filled ? '••••••••' : ''}" autocomplete="off"></label>`;
+          <input type="text" name="${f}" placeholder="${filled ? '•••••••• (dolu)' : ''}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></label>`;
       }).join('');
       const toggleBtn = c.active
         ? `<form action="/admin/payments/${c.provider}/toggle" method="post"><button class="btn btn-light" type="submit">${esc(t('pay_deactivate'))}</button></form>`
