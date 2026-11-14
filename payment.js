@@ -82,16 +82,42 @@ const PROVIDERS = {
 };
 const PROVIDER_KEYS = Object.keys(PROVIDERS);
 
-// --- Yapilandirma (DB) ---------------------------------------------------
+// --- Yapilandirma (DB + ortam degiskeni) ---------------------------------
+// Ortam degiskenleri (Render Environment) DB'nin ONUNE gecer; boylece
+// deploy/uyku sonrasi anahtarlar SIFIRLANMAZ. Ayarlanacak degiskenler:
+//   MOLLIE_API_KEY   = test_... veya live_...
+//   STRIPE_SECRET_KEY = sk_test_... veya sk_live_...
+//   PAYMENTS_ACTIVE  = mollie | stripe   (hangisi aktif)
+//   PAYMENTS_MODE    = test | live       (istege bagli, varsayilan test)
+function envOverlay(row) {
+  const p = row.provider;
+  const out = Object.assign({}, row);
+  const envKey = p === 'mollie' ? process.env.MOLLIE_API_KEY
+    : p === 'stripe' ? process.env.STRIPE_SECRET_KEY
+      : p === 'iyzico' ? process.env.IYZICO_API_KEY : null;
+  if (envKey && String(envKey).trim()) {
+    if (p === 'stripe') out.api_secret = String(envKey).trim();
+    else out.api_key = String(envKey).trim();
+    if (p === 'iyzico' && process.env.IYZICO_API_SECRET) out.api_secret = String(process.env.IYZICO_API_SECRET).trim();
+    out._fromEnv = true;
+  }
+  // Aktif saglayici env'de belirtilmisse onu uygula
+  const act = (process.env.PAYMENTS_ACTIVE || '').trim().toLowerCase();
+  if (act) out.active = (act === p) ? 1 : 0;
+  if (process.env.PAYMENTS_MODE) out.mode = process.env.PAYMENTS_MODE === 'live' ? 'live' : 'test';
+  return out;
+}
+
 function getConfig(provider) {
-  return db.prepare('SELECT * FROM payment_providers WHERE provider = ?').get(provider) || null;
+  const row = db.prepare('SELECT * FROM payment_providers WHERE provider = ?').get(provider);
+  return row ? envOverlay(row) : envOverlay({ provider, active: 0, mode: 'test', api_key: '', api_secret: '' });
 }
 function allConfigs() {
   const rows = db.prepare('SELECT * FROM payment_providers').all();
   const byName = {};
   rows.forEach(r => { byName[r.provider] = r; });
-  // Eksik saglayici olursa bos obje dondur
-  return PROVIDER_KEYS.map(p => byName[p] || { provider: p, active: 0, mode: 'test', api_key: '', api_secret: '' });
+  // Eksik saglayici olursa bos obje dondur; hepsine ortam degiskeni katmanini uygula
+  return PROVIDER_KEYS.map(p => envOverlay(byName[p] || { provider: p, active: 0, mode: 'test', api_key: '', api_secret: '' }));
 }
 
 // Aktif para birimlerinde (config.currencies) kullanilabilen saglayicilar.
