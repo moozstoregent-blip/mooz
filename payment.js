@@ -152,7 +152,8 @@ const REAL = {
     form.set('cancel_url', p.returnUrl);
     form.set('client_reference_id', String(p.orderId));
     form.set('metadata[order_id]', String(p.orderId));
-    ['card', 'bancontact', 'ideal'].forEach((m) => form.append('payment_method_types[]', m));
+    // Stripe hesapta acik ve uygun yontemleri otomatik gosterir (card + varsa Bancontact/iDEAL)
+    form.set('automatic_payment_methods[enabled]', 'true');
     form.set('line_items[0][price_data][currency]', p.currency.toLowerCase());
     form.set('line_items[0][price_data][product_data][name]', p.description);
     form.set('line_items[0][price_data][unit_amount]', String(p.amountCents));
