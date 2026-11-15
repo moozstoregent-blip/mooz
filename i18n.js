@@ -343,6 +343,18 @@ const D = {
   sp_earn_pending: { tr: 'Bekleyen (odenecek)', nl: 'Openstaand (te ontvangen)', fr: 'En attente (a recevoir)', en: 'Pending (to receive)' },
   sp_earn_paid: { tr: 'Odenen', nl: 'Ontvangen', fr: 'Recu', en: 'Received' },
   sp_earn_note: { tr: 'Tutarlar %10 komisyon dusuldukten sonraki net hak edistir.', nl: 'Bedragen zijn netto na 10% commissie.', fr: 'Montants nets apres 10% de commission.', en: 'Amounts are net of 10% commission.' },
+
+  // Hukuki sayfalar + footer + BTW
+  lg_terms: { tr: 'Kullanim sartlari', nl: 'Algemene voorwaarden', fr: 'Conditions generales', en: 'Terms & Conditions' },
+  lg_privacy: { tr: 'Gizlilik', nl: 'Privacybeleid', fr: 'Confidentialite', en: 'Privacy Policy' },
+  lg_cookies: { tr: 'Cerezler', nl: 'Cookiebeleid', fr: 'Cookies', en: 'Cookie Policy' },
+  lg_contact: { tr: 'Iletisim', nl: 'Contact', fr: 'Contact', en: 'Contact' },
+  lg_vat_incl: { tr: 'Tum fiyatlar KDV dahildir', nl: 'Alle prijzen incl. BTW', fr: 'Tous les prix TVA comprise', en: 'All prices incl. VAT' },
+  lg_updated: { tr: 'Son guncelleme', nl: 'Laatst bijgewerkt', fr: 'Derniere mise a jour', en: 'Last updated' },
+  btw: { tr: 'KDV', nl: 'BTW', fr: 'TVA', en: 'VAT' },
+  btw_incl_line: { tr: 'KDV dahil', nl: 'waarvan BTW', fr: 'dont TVA', en: 'incl. VAT' },
+  ck_text: { tr: 'Sitenin calismasi icin gerekli cerezleri kullaniyoruz. Ayrinti:', nl: 'We gebruiken noodzakelijke cookies om de site te laten werken. Meer:', fr: 'Nous utilisons des cookies necessaires au fonctionnement du site. Plus :', en: 'We use necessary cookies to run the site. More:' },
+  ck_ok: { tr: 'Tamam', nl: 'Akkoord', fr: 'J\'accepte', en: 'Got it' },
 };
 
 function t(lang, key) {
