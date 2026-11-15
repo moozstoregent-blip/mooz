@@ -3,7 +3,7 @@
 // =========================================================================
 
 const config = require('./config');
-const { esc, money, convert } = require('./helpers');
+const { esc, money, convert, btwOf } = require('./helpers');
 const payment = require('./payment');
 const shipping = require('./shipping');
 const i18n = require('./i18n');
@@ -66,11 +66,24 @@ ${flash ? `<div class="flash">${esc(flash)}</div>` : ''}
 <main class="wrap">${body}</main>
 <footer class="site-footer"><div class="fwrap">
   <div><div class="logo" style="font-size:18px">${B.emoji} ${esc(B.name)}</div>
-  <p class="muted">${esc(t('tagline'))}</p></div>
-  <div class="muted small"><p>${esc(t('mvp_note'))}</p>
+  <p class="muted">${esc(t('tagline'))}</p>
+  <p class="muted small">${esc(config.company.legalName)} · ${esc(config.company.address)}, ${esc(config.company.postalCity)}, ${esc(config.company.country)}<br>
+  ${esc(t('btw'))}: ${esc(config.company.vat)} · ${esc(t('lg_vat_incl'))}</p></div>
+  <div class="muted small">
+  <nav class="legal-links">
+    <a href="/legal/terms">${esc(t('lg_terms'))}</a>
+    <a href="/legal/privacy">${esc(t('lg_privacy'))}</a>
+    <a href="/legal/cookies">${esc(t('lg_cookies'))}</a>
+    <a href="mailto:${esc(config.company.email)}">${esc(t('lg_contact'))}</a>
+  </nav>
   ${ctx.storeSite ? `<p><a href="${esc(ctx.mainSiteUrl)}">${B.emoji} Mooz pazaryeri &rarr;</a></p>` : ''}
   <p>&copy; ${new Date().getFullYear()} ${esc(B.name)}</p></div>
 </div></footer>
+<div id="cookiebar" class="cookiebar" hidden>
+  <span>${esc(t('ck_text'))} <a href="/legal/cookies">${esc(t('lg_cookies'))}</a>.</span>
+  <button type="button" onclick="moozCookieOk()">${esc(t('ck_ok'))}</button>
+</div>
+<script>(function(){try{if(!localStorage.getItem('mooz_cookie_ok')){var b=document.getElementById('cookiebar');if(b)b.hidden=false;}}catch(e){}})();function moozCookieOk(){try{localStorage.setItem('mooz_cookie_ok','1');}catch(e){}var b=document.getElementById('cookiebar');if(b)b.hidden=true;}</script>
 </body></html>`;
 }
 
@@ -709,6 +722,9 @@ const pages = {
         <button class="btn btn-light" type="submit">${esc(t('cp_apply'))}</button>
       </form>`;
 
+    const payable = coupon ? net : gross;
+    const btwPct = Math.round((config.btwRate || 0) * 100);
+    const btwLine = config.btwRate ? `<div class="totrow btw"><span>${esc(t('btw_incl_line'))} (${btwPct}%)</span><span>${money(btwOf(payable, config.btwRate), ctx.displayCur)}</span></div>` : '';
     const totalRows = coupon ? `
       <div class="totrow"><span>${esc(t('cp_subtotal'))}</span><span>${money(gross, ctx.displayCur)}</span></div>
       <div class="totrow discount"><span>${esc(t('cp_discount'))} (%${coupon.percent})</span><span>- ${money(discount, ctx.displayCur)}</span></div>
@@ -721,6 +737,7 @@ const pages = {
       <div class="cart-summary">
         ${couponBox}
         ${totalRows}
+        ${btwLine}
         <a class="btn btn-brand big" href="/checkout">${esc(t('to_checkout'))} &rarr;</a>
       </div>`);
   },
@@ -762,11 +779,13 @@ const pages = {
             const gross = rows.reduce((s, r) => s + convert(r.price_cents * r.qty, r.currency, ctx.displayCur), 0);
             const percent = coupon ? coupon.percent : 0;
             const net = Math.round(gross * (100 - percent) / 100);
-            if (!coupon) return `<div class="totrow big" style="margin-top:12px"><span>${esc(t('total'))}</span><span>${money(gross, ctx.displayCur)}</span></div>`;
+            const payable = coupon ? net : gross;
+            const btwRow = config.btwRate ? `<div class="totrow btw"><span>${esc(t('btw_incl_line'))} (${Math.round(config.btwRate * 100)}%)</span><span>${money(btwOf(payable, config.btwRate), ctx.displayCur)}</span></div>` : '';
+            if (!coupon) return `<div class="totrow big" style="margin-top:12px"><span>${esc(t('total'))}</span><span>${money(gross, ctx.displayCur)}</span></div>${btwRow}`;
             return `
               <div class="totrow" style="margin-top:12px"><span>${esc(t('cp_subtotal'))}</span><span>${money(gross, ctx.displayCur)}</span></div>
               <div class="totrow discount"><span>\u{1F3F7} ${esc(coupon.code)} (%${coupon.percent})</span><span>- ${money(gross - net, ctx.displayCur)}</span></div>
-              <div class="totrow big"><span>${esc(t('total'))}</span><span>${money(net, ctx.displayCur)}</span></div>`;
+              <div class="totrow big"><span>${esc(t('total'))}</span><span>${money(net, ctx.displayCur)}</span></div>${btwRow}`;
           })()}
         </div>
       </div>`);
@@ -808,7 +827,8 @@ const pages = {
       <p class="muted small">${esc((order.created_at || '').slice(0, 16))} &middot; ${esc(order.address || '')}</p>
       <div class="notice ${order.status === 'odendi' ? 'ok' : order.status === 'iptal' ? 'warn' : 'warn'}">${orderBadge(t, order.status)} — ${esc(payProviderLabel(order.payment_method))}${order.payment_ref ? ' (' + esc(order.payment_ref) + ')' : ''} &middot; ${esc(t('split_note'))}</div>
       ${groups}
-      <div class="cart-summary"><div class="totrow big"><span>${esc(t('grand_total'))}</span><span>${ctx.price(order.total_cents, order.currency)}</span></div></div>`);
+      <div class="cart-summary"><div class="totrow big"><span>${esc(t('grand_total'))}</span><span>${ctx.price(order.total_cents, order.currency)}</span></div>
+      ${config.btwRate ? `<div class="totrow btw"><span>${esc(t('btw_incl_line'))} (${Math.round(config.btwRate * 100)}%)</span><span>${ctx.price(btwOf(order.total_cents, config.btwRate), order.currency)}</span></div>` : ''}</div>`);
   },
 
   sellerOrders(ctx, { sellerOrders, newCount }) {
@@ -845,6 +865,23 @@ const pages = {
   notFound(ctx) {
     const t = ctx.t;
     return layout(ctx, `<div class="empty big"><h1>404</h1><p>${esc(t('nf_text'))}</p><a class="btn btn-brand" href="/">${esc(t('home_btn'))}</a></div>`);
+  },
+
+  // Hukuki sayfa (Sartlar / Gizlilik / Cerez). doc.html guvenli, sablondan gelir.
+  legalPage(ctx, { doc }) {
+    const t = ctx.t;
+    return layout(ctx, `
+      <article class="legal">
+        <div class="panel-head"><div><h1>${esc(doc.title)}</h1>
+        <p class="muted small">${esc(t('lg_updated'))}: ${esc(doc.updated)}</p></div>
+        <a class="btn btn-light" href="/">&larr; ${esc(t('home_btn'))}</a></div>
+        <div class="legal-body">${doc.html}</div>
+        <p class="muted small legal-links">
+          <a href="/legal/terms">${esc(t('lg_terms'))}</a>
+          <a href="/legal/privacy">${esc(t('lg_privacy'))}</a>
+          <a href="/legal/cookies">${esc(t('lg_cookies'))}</a>
+        </p>
+      </article>`);
   },
 };
 
