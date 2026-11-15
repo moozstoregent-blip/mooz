@@ -15,6 +15,7 @@ const payment = require('./payment');
 const shipping = require('./shipping');
 const i18n = require('./i18n');
 const mailer = require('./mailer');
+const legal = require('./legal');
 const { pages } = require('./views');
 
 // --- Mini router ---------------------------------------------------------
@@ -645,6 +646,14 @@ add('POST', '/admin/staff/:id/delete', (ctx) => {
   db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
   ctx.flashMsg(ctx.t('fl_staff_deleted') + ': ' + target.email);
   ctx.redirect('/admin/staff');
+});
+
+// --- Hukuki sayfalar (Sartlar / Gizlilik / Cerez) ---
+add('GET', '/legal/:slug', (ctx) => {
+  const doc = legal.page(ctx.params.slug, ctx.lang);
+  if (!doc) { ctx.title = 'Bulunamadi'; return ctx.send(pages.notFound(ctx), 404); }
+  ctx.title = doc.title;
+  ctx.send(pages.legalPage(ctx, { doc }));
 });
 
 // =========================================================================
