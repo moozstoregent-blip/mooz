@@ -126,6 +126,15 @@ db.exec(`
     api_secret  TEXT DEFAULT '',
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS payouts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id    INTEGER NOT NULL REFERENCES stores(id),
+    amount_cents INTEGER NOT NULL DEFAULT 0,
+    currency    TEXT NOT NULL DEFAULT 'EUR',
+    note        TEXT DEFAULT '',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // Odeme saglayici satirlarini garanti et (keyler bos; admin panelden girilir)
@@ -194,6 +203,7 @@ ensureColumn('users', 'permissions', "TEXT DEFAULT ''");
 ensureColumn('orders', 'discount_cents', 'INTEGER DEFAULT 0');
 ensureColumn('orders', 'coupon_code', "TEXT DEFAULT ''");
 ensureColumn('seller_orders', 'seen', 'INTEGER DEFAULT 0');
+ensureColumn('seller_orders', 'payout_status', "TEXT DEFAULT 'pending'");  // pending | paid
 
 seed();
 
