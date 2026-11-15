@@ -314,6 +314,35 @@ const D = {
   pay_note: { tr: 'Not: Anahtar girilmeden odeme SIMULASYON calisir (gercek para cekilmez). Anahtarlar girilip test edilince gercek cekim devreye girer.', nl: 'Let op: zonder sleutels is betaling een SIMULATIE. Na invoer en test gaat de echte afschrijving live.', fr: 'Note : sans cles, le paiement est une SIMULATION. Apres saisie et test, le paiement reel sera actif.', en: 'Note: without keys, payment is a SIMULATION. Once keys are entered and tested, real charging goes live.' },
   pay_docs: { tr: 'Dokuman', nl: 'Documentatie', fr: 'Documentation', en: 'Docs' },
   pay_env: { tr: 'Render ortam degiskeninden yonetiliyor (kalici)', nl: 'Beheerd via Render-omgevingsvariabele (permanent)', fr: "Gere via une variable d'environnement Render (permanent)", en: 'Managed via Render environment variable (persistent)' },
+
+  // Satici odemeleri / payout
+  po_nav: { tr: 'Satici odemeleri', nl: 'Uitbetalingen', fr: 'Paiements vendeurs', en: 'Seller payouts' },
+  po_title: { tr: 'Satici Odemeleri', nl: 'Uitbetalingen aan verkopers', fr: 'Paiements aux vendeurs', en: 'Seller payouts' },
+  po_sub: { tr: 'Her saticinin hak edisi ve odeme kaydi', nl: 'Saldo en betaalgeschiedenis per verkoper', fr: 'Solde et historique par vendeur', en: 'Balance and payout history per seller' },
+  po_info: { tr: 'Hak edis = odenmis siparislerde satis tutari eksi %10 komisyon. "Odendi" isaretleyince banka havalesini sen yaparsin; sistem kaydini tutar.', nl: 'Saldo = verkoopbedrag van betaalde bestellingen minus 10% commissie. Markeer als betaald nadat je de overschrijving hebt gedaan; het systeem houdt het bij.', fr: 'Solde = montant des commandes payees moins 10% de commission. Marquez comme paye apres votre virement ; le systeme garde la trace.', en: 'Balance = sales of paid orders minus 10% commission. Mark as paid after you make the bank transfer; the system records it.' },
+  po_balances: { tr: 'Guncel hak edisler', nl: 'Huidige saldi', fr: 'Soldes actuels', en: 'Current balances' },
+  po_pending: { tr: 'Bekleyen hak edis', nl: 'Openstaand saldo', fr: 'Solde en attente', en: 'Pending balance' },
+  po_paid_total: { tr: 'Toplam odenen', nl: 'Totaal uitbetaald', fr: 'Total paye', en: 'Total paid' },
+  po_orders: { tr: 'siparis', nl: 'bestellingen', fr: 'commandes', en: 'orders' },
+  po_mark_paid: { tr: 'Odendi isaretle', nl: 'Markeer als betaald', fr: 'Marquer paye', en: 'Mark as paid' },
+  po_note_ph: { tr: 'Havale referansi (ops.)', nl: 'Overschrijvingsref. (opt.)', fr: 'Ref. virement (opt.)', en: 'Transfer ref. (opt.)' },
+  po_confirm: { tr: 'Odendi olarak isaretlensin mi?', nl: 'Markeren als betaald?', fr: 'Marquer comme paye ?', en: 'Mark as paid?' },
+  po_nothing: { tr: 'Bekleyen yok', nl: 'Niets openstaand', fr: 'Rien en attente', en: 'Nothing pending' },
+  po_none: { tr: 'Henuz satici yok', nl: 'Nog geen verkopers', fr: 'Pas encore de vendeurs', en: 'No sellers yet' },
+  po_history: { tr: 'Odeme gecmisi', nl: 'Betaalgeschiedenis', fr: 'Historique des paiements', en: 'Payout history' },
+  po_hist_none: { tr: 'Henuz odeme yapilmadi', nl: 'Nog geen uitbetalingen', fr: 'Aucun paiement effectue', en: 'No payouts yet' },
+  po_th_date: { tr: 'Tarih', nl: 'Datum', fr: 'Date', en: 'Date' },
+  po_th_amount: { tr: 'Tutar', nl: 'Bedrag', fr: 'Montant', en: 'Amount' },
+  po_th_note: { tr: 'Not', nl: 'Notitie', fr: 'Note', en: 'Note' },
+  fl_payout_done: { tr: 'Odeme kaydedildi:', nl: 'Uitbetaling geregistreerd:', fr: 'Paiement enregistre :', en: 'Payout recorded:' },
+  fl_payout_none: { tr: 'Bu satici icin bekleyen hak edis yok.', nl: 'Geen openstaand saldo voor deze verkoper.', fr: 'Aucun solde en attente pour ce vendeur.', en: 'No pending balance for this seller.' },
+  fl_store_notfound: { tr: 'Magaza bulunamadi.', nl: 'Winkel niet gevonden.', fr: 'Boutique introuvable.', en: 'Store not found.' },
+
+  // Satici kazanc ozeti
+  sp_earnings: { tr: 'Kazanclarim', nl: 'Mijn inkomsten', fr: 'Mes revenus', en: 'My earnings' },
+  sp_earn_pending: { tr: 'Bekleyen (odenecek)', nl: 'Openstaand (te ontvangen)', fr: 'En attente (a recevoir)', en: 'Pending (to receive)' },
+  sp_earn_paid: { tr: 'Odenen', nl: 'Ontvangen', fr: 'Recu', en: 'Received' },
+  sp_earn_note: { tr: 'Tutarlar %10 komisyon dusuldukten sonraki net hak edistir.', nl: 'Bedragen zijn netto na 10% commissie.', fr: 'Montants nets apres 10% de commission.', en: 'Amounts are net of 10% commission.' },
 };
 
 function t(lang, key) {
