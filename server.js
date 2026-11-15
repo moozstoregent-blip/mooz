@@ -375,8 +375,17 @@ add('GET', '/seller', (ctx) => {
   if (!requireRole(ctx, 'seller')) return;
   const store = ctx.myStore;
   const productCount = store ? db.prepare('SELECT COUNT(*) AS n FROM products WHERE store_id = ?').get(store.id).n : 0;
+  let earnings = null;
+  if (store) {
+    earnings = db.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN so.payout_status='pending' THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS pending,
+        COALESCE(SUM(CASE WHEN so.payout_status='paid'    THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS paid
+      FROM seller_orders so
+      WHERE so.store_id=? AND so.order_id IN (SELECT id FROM orders WHERE status='odendi')`).get(store.id);
+  }
   ctx.title = 'Satici Paneli';
-  ctx.send(pages.sellerDashboard(ctx, { store, productCount }));
+  ctx.send(pages.sellerDashboard(ctx, { store, productCount, earnings }));
 });
 
 add('GET', '/seller/products', (ctx) => {
@@ -583,6 +592,48 @@ add('POST', '/admin/payments/:provider/toggle', (ctx) => {
     ctx.flashMsg(ctx.t('fl_pay_deactivated') + ' ' + payment.PROVIDERS[p].label);
   }
   ctx.redirect('/admin/payments');
+});
+
+// --- Satici odemeleri / payout (finance yetkisi) ---
+// Hak edis = odenmis siparislerde (status 'odendi') subtotal - komisyon.
+add('GET', '/admin/payouts', (ctx) => {
+  if (!requirePerm(ctx, 'finance')) return;
+  const stores = db.prepare(`
+    SELECT s.id, s.name, s.slug, u.email AS owner_email,
+      COALESCE(SUM(CASE WHEN so.payout_status='pending' THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS pending_net,
+      COUNT(CASE WHEN so.payout_status='pending' THEN 1 END) AS pending_orders,
+      COALESCE(SUM(CASE WHEN so.payout_status='paid'    THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS paid_net
+    FROM stores s
+    JOIN users u ON u.id = s.user_id
+    LEFT JOIN seller_orders so ON so.store_id = s.id AND so.order_id IN (SELECT id FROM orders WHERE status='odendi')
+    GROUP BY s.id
+    ORDER BY pending_net DESC, s.name`).all();
+  const history = db.prepare(`
+    SELECT p.*, s.name AS store_name FROM payouts p JOIN stores s ON s.id = p.store_id
+    ORDER BY p.created_at DESC LIMIT 50`).all();
+  ctx.title = 'Satici Odemeleri';
+  ctx.send(pages.adminPayouts(ctx, { stores, history }));
+});
+
+add('POST', '/admin/payouts/:storeId/pay', (ctx) => {
+  if (!requirePerm(ctx, 'finance')) return;
+  const storeId = ctx.params.storeId;
+  const store = db.prepare('SELECT id,name FROM stores WHERE id=?').get(storeId);
+  if (!store) { ctx.flashMsg(ctx.t('fl_store_notfound')); return ctx.redirect('/admin/payouts'); }
+  const row = db.prepare(`
+    SELECT COALESCE(SUM(so.subtotal_cents - so.commission_cents),0) AS net, COUNT(*) AS n
+    FROM seller_orders so
+    WHERE so.store_id=? AND so.payout_status='pending'
+      AND so.order_id IN (SELECT id FROM orders WHERE status='odendi')`).get(storeId);
+  if (!row.n || row.net <= 0) { ctx.flashMsg(ctx.t('fl_payout_none')); return ctx.redirect('/admin/payouts'); }
+  db.prepare(`UPDATE seller_orders SET payout_status='paid'
+    WHERE store_id=? AND payout_status='pending'
+      AND order_id IN (SELECT id FROM orders WHERE status='odendi')`).run(storeId);
+  const note = (ctx.body.note || '').toString().slice(0, 200);
+  db.prepare('INSERT INTO payouts (store_id, amount_cents, currency, note) VALUES (?,?,?,?)')
+    .run(storeId, row.net, 'EUR', note);
+  ctx.flashMsg(ctx.t('fl_payout_done') + ' ' + store.name + ' — ' + H.money(row.net, 'EUR'));
+  ctx.redirect('/admin/payouts');
 });
 
 add('POST', '/admin/staff/:id/delete', (ctx) => {
