@@ -340,7 +340,7 @@ const pages = {
       </div>`);
   },
 
-  sellerDashboard(ctx, { store, productCount }) {
+  sellerDashboard(ctx, { store, productCount, earnings }) {
     const t = ctx.t;
     let notice = '';
     if (!store) notice = `<p class="empty">${esc(t('sp_no_store'))}</p>`;
@@ -359,6 +359,12 @@ const pages = {
         <div class="stat${ctx.newOrders ? ' hot' : ''}"><div class="n">${ctx.newOrders}</div><div class="l">${esc(t('sp_stat_neworder'))}</div></div>
         <div class="stat"><div class="n">${esc(store.slug)}</div><div class="l">${esc(t('sp_stat_address'))}</div></div>
       </div>
+      ${earnings ? `<div class="sect-h"><h2>${esc(t('sp_earnings'))}</h2></div>
+      <div class="stat-row">
+        <div class="stat"><div class="n">${money(earnings.pending, 'EUR')}</div><div class="l">${esc(t('sp_earn_pending'))}</div></div>
+        <div class="stat"><div class="n">${money(earnings.paid, 'EUR')}</div><div class="l">${esc(t('sp_earn_paid'))}</div></div>
+      </div>
+      <p class="muted small">${esc(t('sp_earn_note'))}</p>` : ''}
       <div class="panel-links">
         <a class="btn btn-ghost" href="/seller/products">${esc(t('sp_manage_products'))}</a>
         <a class="btn btn-ghost nav-badge-wrap" href="/seller/orders">${esc(t('sp_incoming'))}${ctx.newOrders ? `<span class="nav-badge">${ctx.newOrders}</span>` : ''}</a>
@@ -437,6 +443,7 @@ const pages = {
     if (ctx.hasPerm('staff')) navLinks.push(`<a class="btn btn-light" href="/admin/staff">${esc(t('ad_nav_staff'))}</a>`);
     if (ctx.hasPerm('marketing')) navLinks.push(`<a class="btn btn-light" href="/admin/coupons">${esc(t('ad_nav_coupons'))}</a>`);
     if (ctx.hasPerm('finance')) navLinks.push(`<a class="btn btn-light" href="/admin/payments">${esc(t('pay_nav'))}</a>`);
+    if (ctx.hasPerm('finance')) navLinks.push(`<a class="btn btn-light" href="/admin/payouts">${esc(t('po_nav'))}</a>`);
     const navBar = navLinks.length ? `<div class="admin-nav">${navLinks.join('')}</div>` : '';
 
     // Finans ozeti (sadece finance yetkisi)
@@ -615,6 +622,47 @@ const pages = {
       <div class="notice warn">${esc(t('pay_note'))}</div>
       <p class="muted small">${esc(t('pay_secret_note'))}</p>
       <div class="pay-grid">${cards}</div>`);
+  },
+
+  adminPayouts(ctx, { stores, history }) {
+    const t = ctx.t;
+    const active = stores.filter(s => s.pending_net > 0 || s.paid_net > 0 || s.pending_orders > 0);
+    const list = active.length ? active : stores;
+    const rows = list.map(s => {
+      const payBtn = s.pending_net > 0
+        ? `<form action="/admin/payouts/${s.id}/pay" method="post" onsubmit="return confirm('${esc(t('po_confirm'))} ${esc(s.name)}: ${money(s.pending_net, 'EUR')}?')" class="payout-form">
+             <input type="text" name="note" placeholder="${esc(t('po_note_ph'))}" class="po-note">
+             <button class="btn btn-brand" type="submit">${esc(t('po_mark_paid'))}</button>
+           </form>`
+        : `<span class="muted small">${esc(t('po_nothing'))}</span>`;
+      return `<tr>
+        <td><strong>${esc(s.name)}</strong><br><span class="muted small">${esc(s.owner_email)}</span></td>
+        <td><strong>${money(s.pending_net, 'EUR')}</strong><br><span class="muted small">${s.pending_orders} ${esc(t('po_orders'))}</span></td>
+        <td class="muted">${money(s.paid_net, 'EUR')}</td>
+        <td class="actions">${payBtn}</td></tr>`;
+    }).join('');
+
+    const histRows = history.length ? history.map(h => `<tr>
+      <td class="small">${esc((h.created_at || '').slice(0, 16))}</td>
+      <td>${esc(h.store_name)}</td>
+      <td><strong>${money(h.amount_cents, h.currency)}</strong></td>
+      <td class="small muted">${esc(h.note || '')}</td></tr>`).join('')
+      : `<tr><td colspan="4" class="muted">${esc(t('po_hist_none'))}</td></tr>`;
+
+    return layout(ctx, `
+      <div class="panel-head admin"><div><h1>${esc(t('po_title'))}</h1><p class="muted">${esc(t('po_sub'))}</p></div>
+        <a class="btn btn-light" href="/admin">&larr; ${esc(t('st_back'))}</a></div>
+      <div class="notice">${esc(t('po_info'))}</div>
+
+      <div class="sect-h"><h2>${esc(t('po_balances'))}</h2></div>
+      <div class="table-wrap"><table class="ptable">
+        <thead><tr><th>${esc(t('th_store'))}</th><th>${esc(t('po_pending'))}</th><th>${esc(t('po_paid_total'))}</th><th>${esc(t('th_action'))}</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="4" class="muted">${esc(t('po_none'))}</td></tr>`}</tbody></table></div>
+
+      <div class="sect-h"><h2>${esc(t('po_history'))}</h2></div>
+      <div class="table-wrap"><table class="ptable">
+        <thead><tr><th>${esc(t('po_th_date'))}</th><th>${esc(t('th_store'))}</th><th>${esc(t('po_th_amount'))}</th><th>${esc(t('po_th_note'))}</th></tr></thead>
+        <tbody>${histRows}</tbody></table></div>`);
   },
 
   cart(ctx, { rows, coupon }) {
