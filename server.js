@@ -14,6 +14,7 @@ const H = require('./helpers');
 const payment = require('./payment');
 const shipping = require('./shipping');
 const i18n = require('./i18n');
+const mailer = require('./mailer');
 const { pages } = require('./views');
 
 // --- Mini router ---------------------------------------------------------
@@ -674,6 +675,61 @@ function fulfillOrder(orderId, { usable, percent, coupon, userId }) {
   db.prepare('DELETE FROM cart_items WHERE user_id = ?').run(userId);
 }
 
+// Siparis odendiginde alici + saticilara e-posta gonder (fire-and-forget).
+// Anahtar yoksa log modunda calisir; her ihtimalde siparis akisini bozmaz.
+function sendOrderEmails(orderId) {
+  try {
+    const o = db.prepare('SELECT o.*, u.email AS buyer_email, u.name AS buyer_name FROM orders o JOIN users u ON u.id = o.buyer_id WHERE o.id = ?').get(orderId);
+    if (!o) return;
+    const sos = db.prepare(
+      'SELECT so.*, s.name AS store_name, u.email AS seller_email FROM seller_orders so ' +
+      'JOIN stores s ON s.id = so.store_id JOIN users u ON u.id = s.user_id WHERE so.order_id = ?'
+    ).all(orderId);
+
+    const row = (it) => '<tr><td style="padding:4px 0">' + H.esc(it.name) + ' &times; ' + it.qty +
+      '</td><td style="padding:4px 0;text-align:right">' + H.money(it.price_cents * it.qty, it.currency) + '</td></tr>';
+    const addr = H.esc(o.address || '-');
+
+    // 1) Alici onay e-postasi (tum siparis)
+    const allItems = [];
+    sos.forEach(so => { db.prepare('SELECT * FROM order_items WHERE seller_order_id = ?').all(so.id).forEach(it => allItems.push(it)); });
+    const buyerBody =
+      '<p>Bedankt voor je bestelling bij ' + config.brand.name + '!</p>' +
+      '<p><b>Bestelling #' + o.id + '</b></p>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:14px">' + allItems.map(row).join('') + '</table>' +
+      '<hr style="border:none;border-top:1px solid #e4e4e7;margin:12px 0">' +
+      '<p style="text-align:right"><b>Totaal: ' + H.money(o.total_cents, o.currency) + '</b></p>' +
+      '<p style="color:#71717a;font-size:13px">Leveradres: ' + addr + '</p>';
+    mailer.send({
+      to: o.buyer_email,
+      subject: config.brand.name + ' — Bevestiging bestelling #' + o.id,
+      html: mailer.layout('Bestelling #' + o.id + ' bevestigd', buyerBody),
+      text: 'Bedankt voor je bestelling #' + o.id + ' bij ' + config.brand.name + '. Totaal: ' + H.money(o.total_cents, o.currency) + '.',
+    }).catch(() => {});
+
+    // 2) Satici bildirimi (her magaza kendi kalemleri)
+    sos.forEach(so => {
+      const items = db.prepare('SELECT * FROM order_items WHERE seller_order_id = ?').all(so.id);
+      const sellerBody =
+        '<p>Je hebt een nieuwe bestelling ontvangen voor <b>' + H.esc(so.store_name) + '</b>.</p>' +
+        '<p><b>Bestelling #' + o.id + '</b></p>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:14px">' + items.map(row).join('') + '</table>' +
+        '<hr style="border:none;border-top:1px solid #e4e4e7;margin:12px 0">' +
+        '<p style="text-align:right"><b>Subtotaal: ' + H.money(so.subtotal_cents, so.currency) + '</b></p>' +
+        '<p style="color:#71717a;font-size:13px">Leveradres: ' + addr + '</p>' +
+        '<p style="color:#71717a;font-size:13px">Log in op je verkooppaneel om de bestelling te verwerken.</p>';
+      mailer.send({
+        to: so.seller_email,
+        subject: config.brand.name + ' — Nieuwe bestelling #' + o.id,
+        html: mailer.layout('Nieuwe bestelling #' + o.id, sellerBody),
+        text: 'Nieuwe bestelling #' + o.id + ' voor ' + so.store_name + '. Subtotaal: ' + H.money(so.subtotal_cents, so.currency) + '.',
+      }).catch(() => {});
+    });
+  } catch (e) {
+    console.log('[MAIL] sendOrderEmails hata:', e && e.message);
+  }
+}
+
 add('POST', '/checkout', async (ctx) => {
   if (!requireLogin(ctx)) return;
   const rows = cartRows(ctx.user.id);
@@ -704,6 +760,7 @@ add('POST', '/checkout', async (ctx) => {
       .run(ctx.user.id, orderTotal, orderCurrency, 'odendi', address, 'simulation', payment.simRef(), discountCents, coupon ? coupon.code : '');
     const orderId = Number(info.lastInsertRowid);
     fulfillOrder(orderId, { usable, percent, coupon, userId: ctx.user.id });
+    sendOrderEmails(orderId);
     ctx.setCookie('mooz_coupon=; Path=/; Max-Age=0');
     ctx.flashMsg(ctx.t('fl_order_placed') + ' (' + ctx.t('fl_simulation') + ')');
     return ctx.redirect('/orders/' + orderId);
@@ -742,6 +799,7 @@ function markOrderPaid(orderId) {
   const o = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!o || o.status !== 'pending') return false;
   db.prepare("UPDATE orders SET status = 'odendi' WHERE id = ?").run(orderId);
+  sendOrderEmails(orderId);
   return true;
 }
 // Siparisi iptal et + stok iade (beklemedeyse). Idempotent.
