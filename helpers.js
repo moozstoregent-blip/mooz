@@ -72,4 +72,10 @@ function parseCookies(header) {
   return out;
 }
 
-module.exports = { slugify, esc, money, convert, hashPassword, verifyPassword, sign, unsign, parseCookies };
+// KDV-dahil bir tutarin icindeki KDV payi. rate orn 0.21 -> cents*21/121
+function btwOf(cents, rate) {
+  const r = rate || 0;
+  return Math.round((cents || 0) * r / (1 + r));
+}
+
+module.exports = { slugify, esc, money, convert, hashPassword, verifyPassword, sign, unsign, parseCookies, btwOf };
