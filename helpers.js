@@ -78,4 +78,7 @@ function btwOf(cents, rate) {
   return Math.round((cents || 0) * r / (1 + r));
 }
 
-module.exports = { slugify, esc, money, convert, hashPassword, verifyPassword, sign, unsign, parseCookies, btwOf };
+// Sifre sifirlama icin rastgele token
+function resetToken() { return crypto.randomBytes(24).toString('hex'); }
+
+module.exports = { slugify, esc, money, convert, hashPassword, verifyPassword, sign, unsign, parseCookies, btwOf, resetToken };
