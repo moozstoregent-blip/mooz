@@ -43,10 +43,19 @@ function layout(ctx, body) {
     right = `<a class="btn btn-ghost" href="/login">${esc(t('login'))}</a><a class="btn btn-brand" href="/register">${esc(t('register'))}</a>`;
   }
 
+  const pageTitle = ctx.title ? ctx.title + ' · ' + B.name : B.name + ' · ' + t('tagline');
+  const metaDesc = esc(ctx.metaDesc || t('tagline'));
   return `<!DOCTYPE html>
-<html lang="tr"><head>
+<html lang="${esc(ctx.lang || 'nl')}"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${esc(ctx.title ? ctx.title + ' · ' + B.name : B.name)}</title>
+<title>${esc(pageTitle)}</title>
+<meta name="description" content="${metaDesc}">
+<meta name="theme-color" content="${B.color}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${esc(B.name)}">
+<meta property="og:title" content="${esc(pageTitle)}">
+<meta property="og:description" content="${metaDesc}">
+<meta name="twitter:card" content="summary">
 <style>${CSS}</style>
 <style>:root{ --brand:${B.color}; --brand-dark:${B.colorDark}; }</style>
 </head><body>
@@ -325,11 +334,39 @@ const pages = {
           <label>${esc(t('password'))}</label><input type="password" name="password" required>
           <button class="btn btn-brand big" type="submit">${esc(t('login'))}</button>
         </form>
+        <p class="muted small"><a href="/forgot">${esc(t('fw_link'))}</a></p>
         <p class="muted small">${esc(t('no_account'))} <a href="/register">${esc(t('register'))}</a></p>
         <div class="demo-box"><strong>${esc(t('demo_logins'))}</strong>
           <ul><li>Admin: admin@mooz.store / admin123</li>
           <li>Satici: moda@mooz.store / satici123</li></ul>
         </div>
+      </div>`);
+  },
+
+  forgot(ctx) {
+    const t = ctx.t;
+    return layout(ctx, `
+      <div class="auth-card">
+        <h1>${esc(t('fw_title'))}</h1>
+        <p class="muted small">${esc(t('fw_sub'))}</p>
+        <form action="/forgot" method="post">
+          <label>${esc(t('email'))}</label><input type="email" name="email" required>
+          <button class="btn btn-brand big" type="submit">${esc(t('fw_send'))}</button>
+        </form>
+        <p class="muted small"><a href="/login">&larr; ${esc(t('login'))}</a></p>
+      </div>`);
+  },
+
+  resetPassword(ctx, { token }) {
+    const t = ctx.t;
+    return layout(ctx, `
+      <div class="auth-card">
+        <h1>${esc(t('rp_title'))}</h1>
+        <form action="/reset" method="post">
+          <input type="hidden" name="token" value="${esc(token)}">
+          <label>${esc(t('rp_new_pw'))}</label><input type="password" name="password" minlength="6" required>
+          <button class="btn btn-brand big" type="submit">${esc(t('rp_save'))}</button>
+        </form>
       </div>`);
   },
 
