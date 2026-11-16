@@ -63,8 +63,45 @@ function detectLang(header) {
   return null;
 }
 
+// Guvenlik basliklari (her yanitta). CSP inline stil/script'e izin verir (uygulama inline yogun).
+const SEC_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'X-Frame-Options': 'SAMEORIGIN',
+  'Content-Security-Policy':
+    "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; " +
+    "script-src 'self' 'unsafe-inline'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'",
+};
+
+// --- Basit rate limit (bellek ici): kaba kuvvet / spam korumasi ---
+const rlHits = new Map(); // key -> [timestamps]
+function clientIp(req) {
+  const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return xff || (req.socket && req.socket.remoteAddress) || 'unknown';
+}
+function rateOk(key, max, windowMs) {
+  const now = Date.now();
+  const arr = (rlHits.get(key) || []).filter(t => now - t < windowMs);
+  arr.push(now);
+  rlHits.set(key, arr);
+  return arr.length <= max; // true = izinli
+}
+// periyodik temizlik (bellek sismesin)
+const _rlTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [k, arr] of rlHits) {
+    const keep = arr.filter(t => now - t < 3600000);
+    if (keep.length) rlHits.set(k, keep); else rlHits.delete(k);
+  }
+}, 600000);
+if (_rlTimer.unref) _rlTimer.unref();
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
 function buildCtx(req, res) {
   const cookies = H.parseCookies(req.headers.cookie);
+  // HTTPS arkasindaysak (Render) oturum cerezine Secure ekle
+  const isHttps = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
   let user = null, myStore = null;
   const uid = H.unsign(cookies.mooz_uid);
   if (uid) {
@@ -121,16 +158,16 @@ function buildCtx(req, res) {
     path: req.url.split('?')[0],
     _cookies: outCookies,
     setCookie(c) { this._cookies.push(c); },
-    login(id) { this.setCookie('mooz_uid=' + H.sign(String(id)) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000'); },
+    login(id) { this.setCookie('mooz_uid=' + H.sign(String(id)) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000' + (isHttps ? '; Secure' : '')); },
     logout() { this.setCookie('mooz_uid=; Path=/; Max-Age=0'); },
     flashMsg(m) { this.setCookie('mooz_flash=' + encodeURIComponent(m) + '; Path=/; Max-Age=30'); },
     send(html, status) {
-      const h = { 'Content-Type': 'text/html; charset=utf-8' };
+      const h = Object.assign({ 'Content-Type': 'text/html; charset=utf-8' }, SEC_HEADERS);
       if (this._cookies.length) h['Set-Cookie'] = this._cookies;
       res.writeHead(status || 200, h); res.end(html);
     },
     redirect(loc) {
-      const h = { Location: loc };
+      const h = Object.assign({ Location: loc }, SEC_HEADERS);
       if (this._cookies.length) h['Set-Cookie'] = this._cookies;
       res.writeHead(302, h); res.end();
     },
@@ -249,7 +286,7 @@ add('GET', '/', (ctx) => {
   };
   products.sort(sorters[sort]);
 
-  ctx.title = config.brand.name;
+  // Ana sayfada title bos birakilir -> "Mooz · <slogan>" (SEO dostu)
   ctx.send(pages.home(ctx, { products, activeCat, q, sort, instock, min: ctx.query.min || '', max: ctx.query.max || '' }));
 });
 
@@ -266,6 +303,7 @@ add('GET', '/product/:id', (ctx) => {
     ? db.prepare('SELECT rating, comment FROM reviews WHERE product_id = ? AND user_id = ?').get(p.id, ctx.user.id)
     : null;
   ctx.title = p.name;
+  ctx.metaDesc = (p.description || p.name).replace(/\s+/g, ' ').trim().slice(0, 160);
   ctx.send(pages.product(ctx, { p, agg, reviews, myReview }));
 });
 
@@ -331,8 +369,15 @@ add('GET', '/register', (ctx) => { ctx.title = 'Kayit ol'; ctx.send(pages.regist
 add('GET', '/login', (ctx) => { ctx.title = 'Giris yap'; ctx.send(pages.login(ctx)); });
 
 add('POST', '/register', (ctx) => {
-  const { name, email, password, role } = ctx.body;
+  if (!rateOk('reg:' + clientIp(ctx.req), 10, 3600000)) { ctx.flashMsg(ctx.t('fl_too_many')); return ctx.redirect('/register'); }
+  const name = (ctx.body.name || '').trim();
+  const email = (ctx.body.email || '').trim().toLowerCase();
+  const password = ctx.body.password || '';
+  const role = ctx.body.role;
   if (!name || !email || !password) { ctx.flashMsg(ctx.t('fl_fill_all')); return ctx.redirect('/register'); }
+  if (!EMAIL_RE.test(email) || email.length > 160) { ctx.flashMsg(ctx.t('fl_email_invalid')); return ctx.redirect('/register'); }
+  if (password.length < 6) { ctx.flashMsg(ctx.t('fl_pw_short')); return ctx.redirect('/register'); }
+  if (name.length > 80) { ctx.flashMsg(ctx.t('fl_fill_all')); return ctx.redirect('/register'); }
   if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) {
     ctx.flashMsg(ctx.t('fl_email_exists')); return ctx.redirect('/register');
   }
@@ -351,7 +396,13 @@ add('POST', '/register', (ctx) => {
 });
 
 add('POST', '/login', (ctx) => {
-  const u = db.prepare('SELECT * FROM users WHERE email = ?').get(ctx.body.email || '');
+  const ip = clientIp(ctx.req);
+  const email = (ctx.body.email || '').trim().toLowerCase();
+  // IP + e-posta bazli: 10 dk icinde 8 basarisiz denemeden sonra kilitle
+  if (!rateOk('login:' + ip, 20, 600000) || !rateOk('login:' + ip + ':' + email, 8, 600000)) {
+    ctx.flashMsg(ctx.t('fl_too_many')); return ctx.redirect('/login');
+  }
+  const u = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
   if (!u || !H.verifyPassword(ctx.body.password || '', u.password_hash)) {
     ctx.flashMsg(ctx.t('fl_login_fail')); return ctx.redirect('/login');
   }
@@ -360,6 +411,58 @@ add('POST', '/login', (ctx) => {
 });
 
 add('POST', '/logout', (ctx) => { ctx.logout(); ctx.redirect('/'); });
+
+// --- Sifre sifirlama ---
+add('GET', '/forgot', (ctx) => { ctx.title = 'Sifremi unuttum'; ctx.send(pages.forgot(ctx)); });
+
+add('POST', '/forgot', (ctx) => {
+  if (!rateOk('forgot:' + clientIp(ctx.req), 5, 900000)) { ctx.flashMsg(ctx.t('fl_too_many')); return ctx.redirect('/forgot'); }
+  const email = (ctx.body.email || '').trim().toLowerCase();
+  const u = email ? db.prepare('SELECT id,email FROM users WHERE email = ?').get(email) : null;
+  if (u) {
+    const token = H.resetToken();
+    db.prepare("INSERT INTO password_resets (user_id, token, expires_at) VALUES (?,?, datetime('now','+1 hour'))").run(u.id, token);
+    const link = baseUrl(ctx.req) + '/reset?token=' + token;
+    const body = '<p>Je hebt een wachtwoordreset aangevraagd voor ' + config.brand.name + '.</p>' +
+      '<p><a href="' + link + '">Klik hier om een nieuw wachtwoord in te stellen</a> (1 uur geldig).</p>' +
+      '<p style="color:#71717a;font-size:13px">Niet aangevraagd? Negeer deze e-mail.</p>';
+    mailer.send({
+      to: u.email,
+      subject: config.brand.name + ' — Wachtwoord opnieuw instellen',
+      html: mailer.layout('Wachtwoord opnieuw instellen', body),
+      text: 'Wachtwoord resetten voor ' + config.brand.name + ': ' + link + ' (1 uur geldig).',
+    }).catch(() => {});
+  }
+  // Her durumda ayni mesaj (e-posta var mi sizdirma)
+  ctx.flashMsg(ctx.t('fl_fw_sent'));
+  ctx.redirect('/login');
+});
+
+function validReset(token) {
+  if (!token) return null;
+  return db.prepare("SELECT * FROM password_resets WHERE token=? AND used=0 AND expires_at > datetime('now')").get(token) || null;
+}
+
+add('GET', '/reset', (ctx) => {
+  const pr = validReset(ctx.query.token);
+  if (!pr) { ctx.flashMsg(ctx.t('fl_rp_invalid')); return ctx.redirect('/forgot'); }
+  ctx.title = 'Yeni sifre';
+  ctx.send(pages.resetPassword(ctx, { token: ctx.query.token }));
+});
+
+add('POST', '/reset', (ctx) => {
+  if (!rateOk('reset:' + clientIp(ctx.req), 10, 900000)) { ctx.flashMsg(ctx.t('fl_too_many')); return ctx.redirect('/forgot'); }
+  const pr = validReset(ctx.body.token);
+  if (!pr) { ctx.flashMsg(ctx.t('fl_rp_invalid')); return ctx.redirect('/forgot'); }
+  const pw = ctx.body.password || '';
+  if (pw.length < 6) { ctx.flashMsg(ctx.t('fl_pw_short')); return ctx.redirect('/reset?token=' + encodeURIComponent(ctx.body.token)); }
+  db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(H.hashPassword(pw), pr.user_id);
+  db.prepare('UPDATE password_resets SET used=1 WHERE id=?').run(pr.id);
+  // Bu kullanicinin diger bekleyen token'larini da gecersiz kil
+  db.prepare('UPDATE password_resets SET used=1 WHERE user_id=? AND used=0').run(pr.user_id);
+  ctx.flashMsg(ctx.t('fl_rp_done'));
+  ctx.redirect('/login');
+});
 
 // Dil / para birimi tercihi
 add('POST', '/prefs', (ctx) => {
@@ -706,6 +809,24 @@ add('GET', '/legal/:slug', (ctx) => {
   if (!doc) { ctx.title = 'Bulunamadi'; return ctx.send(pages.notFound(ctx), 404); }
   ctx.title = doc.title;
   ctx.send(pages.legalPage(ctx, { doc }));
+});
+
+// --- SEO: robots.txt + sitemap.xml ---
+add('GET', '/robots.txt', (ctx) => {
+  const base = baseUrl(ctx.req);
+  ctx.res.writeHead(200, Object.assign({ 'Content-Type': 'text/plain; charset=utf-8' }, SEC_HEADERS));
+  ctx.res.end('User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /seller\nDisallow: /cart\nDisallow: /checkout\nDisallow: /orders\nSitemap: ' + base + '/sitemap.xml\n');
+});
+
+add('GET', '/sitemap.xml', (ctx) => {
+  const base = baseUrl(ctx.req);
+  const urls = ['/', '/legal/terms', '/legal/privacy', '/legal/cookies'];
+  db.prepare("SELECT p.id FROM products p JOIN stores s ON s.id=p.store_id AND s.status='active'").all().forEach(p => urls.push('/product/' + p.id));
+  db.prepare("SELECT slug FROM stores WHERE status='active'").all().forEach(s => urls.push('/store/' + s.slug));
+  const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    urls.map(u => '  <url><loc>' + H.esc(base + u) + '</loc></url>').join('\n') + '\n</urlset>\n';
+  ctx.res.writeHead(200, Object.assign({ 'Content-Type': 'application/xml; charset=utf-8' }, SEC_HEADERS));
+  ctx.res.end(xml);
 });
 
 // =========================================================================
