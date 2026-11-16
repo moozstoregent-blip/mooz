@@ -457,6 +457,7 @@ const pages = {
     if (ctx.hasPerm('marketing')) navLinks.push(`<a class="btn btn-light" href="/admin/coupons">${esc(t('ad_nav_coupons'))}</a>`);
     if (ctx.hasPerm('finance')) navLinks.push(`<a class="btn btn-light" href="/admin/payments">${esc(t('pay_nav'))}</a>`);
     if (ctx.hasPerm('finance')) navLinks.push(`<a class="btn btn-light" href="/admin/payouts">${esc(t('po_nav'))}</a>`);
+    if (ctx.hasPerm('finance')) navLinks.push(`<a class="btn btn-light" href="/admin/returns">${esc(t('rt_nav'))}</a>`);
     const navBar = navLinks.length ? `<div class="admin-nav">${navLinks.join('')}</div>` : '';
 
     // Finans ozeti (sadece finance yetkisi)
@@ -678,6 +679,42 @@ const pages = {
         <tbody>${histRows}</tbody></table></div>`);
   },
 
+  // Iade yonetimi (finance). Talepler ustte; gecmis altta.
+  adminReturns(ctx, { rows }) {
+    const t = ctx.t;
+    const stBadge = (st) => st === 'refunded' ? `<span class="badge ok">${esc(t('rt_st_refunded'))}</span>`
+      : st === 'rejected' ? `<span class="badge off">${esc(t('rt_st_rejected'))}</span>`
+      : `<span class="badge warn">${esc(t('rt_st_requested'))}</span>`;
+    const body = rows.length ? rows.map(r => {
+      const amount = money(r.subtotal_cents, r.so_currency);
+      const provLabel = (r.payment_method === 'mollie' || r.payment_method === 'stripe')
+        ? (payment.PROVIDERS[r.payment_method] ? payment.PROVIDERS[r.payment_method].label : r.payment_method)
+        : t('rt_manual_src');
+      const actions = r.status === 'requested' ? `
+        <form action="/admin/returns/${r.id}/refund" method="post" onsubmit="return confirm('${esc(t('rt_confirm_refund'))} ${esc(amount)}?')" class="ret-form">
+          <button class="btn btn-brand" type="submit">${esc(t('rt_refund_btn'))}</button>
+        </form>
+        <form action="/admin/returns/${r.id}/reject" method="post" onsubmit="return confirm('${esc(t('rt_confirm_reject'))}')" class="ret-form">
+          <button class="btn btn-light" type="submit">${esc(t('rt_reject_btn'))}</button>
+        </form>` : `<span class="muted small">${r.refund_ref ? esc(t('rt_ref')) + ': ' + esc(r.refund_ref) : ''}${r.admin_note ? ' · ' + esc(r.admin_note) : ''}</span>`;
+      return `<tr>
+        <td class="small">${esc((r.created_at || '').slice(0, 16))}<br>#${r.order_id}</td>
+        <td>${esc(r.store_name)}<br><span class="muted small">${esc(r.buyer_email)}</span></td>
+        <td><strong>${amount}</strong><br><span class="muted small">${esc(provLabel)}</span></td>
+        <td class="small">${esc(r.reason || '-')}</td>
+        <td>${stBadge(r.status)}</td>
+        <td class="actions">${actions}</td></tr>`;
+    }).join('') : `<tr><td colspan="6" class="muted">${esc(t('rt_none'))}</td></tr>`;
+
+    return layout(ctx, `
+      <div class="panel-head admin"><div><h1>${esc(t('rt_title'))}</h1><p class="muted">${esc(t('rt_sub'))}</p></div>
+        <a class="btn btn-light" href="/admin">&larr; ${esc(t('st_back'))}</a></div>
+      <div class="notice">${esc(t('rt_info'))}</div>
+      <div class="table-wrap"><table class="ptable">
+        <thead><tr><th>${esc(t('po_th_date'))}</th><th>${esc(t('th_store'))} / ${esc(t('th_owner'))}</th><th>${esc(t('po_th_amount'))}</th><th>${esc(t('rt_reason'))}</th><th>${esc(t('status'))}</th><th>${esc(t('th_action'))}</th></tr></thead>
+        <tbody>${body}</tbody></table></div>`);
+  },
+
   cart(ctx, { rows, coupon }) {
     const t = ctx.t;
     if (!rows.length) return layout(ctx, `
@@ -814,11 +851,24 @@ const pages = {
       const ship = so.tracking_no
         ? `<div class="sum-line"><span>${esc(t('cargo'))}</span><span>${esc(shipping.carrierLabel(so.carrier))} &middot; ${esc(so.tracking_no)}</span></div>`
         : '';
+      const retLabel = so.return_status === 'refunded' ? `<span class="badge ok">${esc(t('rt_st_refunded'))}</span>`
+        : so.return_status === 'rejected' ? `<span class="badge off">${esc(t('rt_st_rejected'))}</span>`
+        : so.return_status === 'requested' ? `<span class="badge warn">${esc(t('rt_st_requested'))}</span>` : '';
+      const retBlock = so.canReturn ? `
+        <details class="ret-request"><summary>${esc(t('rt_request'))}</summary>
+          <form action="/returns" method="post" class="ret-req-form">
+            <input type="hidden" name="seller_order_id" value="${so.id}">
+            <textarea name="reason" rows="2" placeholder="${esc(t('rt_reason_ph'))}" maxlength="500"></textarea>
+            <button class="btn btn-light" type="submit">${esc(t('rt_request_btn'))}</button>
+          </form>
+        </details>`
+        : (retLabel ? `<div class="sum-line"><span>${esc(t('rt_status'))}</span><span>${retLabel}</span></div>` : '');
       return `<div class="order-seller">
         <div class="os-head"><a href="/store/${esc(so.store_slug)}">\u{1F3EA} ${esc(so.store_name)}</a> ${soBadge(t, so.status)}</div>
         ${items}
         ${ship}
         <div class="sum-line muted"><span>${esc(t('subtotal'))}</span><span>${ctx.price(so.subtotal_cents, so.currency)}</span></div>
+        ${retBlock}
       </div>`;
     }).join('');
     return layout(ctx, `
@@ -840,8 +890,11 @@ const pages = {
       const items = so.items.map(it => `<div class="sum-line"><span>${esc(it.name)} × ${it.qty}</span><span>${money(it.price_cents * it.qty, it.currency)}</span></div>`).join('');
       const net = so.subtotal_cents - so.commission_cents;
       const btn = (val, label) => `<form action="/seller/orders/${so.id}/status" method="post" style="display:inline"><input type="hidden" name="status" value="${val}"><button class="btn btn-ghost" type="submit"${so.status === val ? ' disabled' : ''}>${label}</button></form>`;
+      const retBadge = so.return_status === 'refunded' ? `<span class="badge off">${esc(t('rt_st_refunded'))}</span>`
+        : so.return_status === 'rejected' ? `<span class="badge off">${esc(t('rt_st_rejected'))}</span>`
+        : so.return_status === 'requested' ? `<span class="badge warn">${esc(t('rt_st_requested'))}</span>` : '';
       return `<div class="order-seller${so.seen ? '' : ' is-new'}">
-        <div class="os-head"><strong>${esc(t('order'))} #${so.order_id}</strong> ${so.seen ? '' : `<span class="badge new">${esc(t('so_badge_new'))}</span>`} ${soBadge(ctx.t, so.status)} <span class="muted small">${esc((so.order_date || '').slice(0, 16))} &middot; ${esc(so.buyer_name)}</span></div>
+        <div class="os-head"><strong>${esc(t('order'))} #${so.order_id}</strong> ${so.seen ? '' : `<span class="badge new">${esc(t('so_badge_new'))}</span>`} ${soBadge(ctx.t, so.status)} ${retBadge} <span class="muted small">${esc((so.order_date || '').slice(0, 16))} &middot; ${esc(so.buyer_name)}</span></div>
         <div class="muted small">${esc(t('so_delivery'))}: ${esc(so.address || '-')}</div>
         ${items}
         <div class="sum-line"><span>${esc(t('cp_subtotal'))}</span><span>${money(so.subtotal_cents, so.currency)}</span></div>
