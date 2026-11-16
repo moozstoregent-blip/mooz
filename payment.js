@@ -200,6 +200,30 @@ const REAL = {
     if (res.body.status === 'expired') return 'expired';
     return 'open';
   },
+
+  // ----- Geri odeme (refund) -----
+  async mollie_refund(cfg, ref, amountCents, currency) {
+    const res = await httpsRequest('POST', 'https://api.mollie.com/v2/payments/' + encodeURIComponent(ref) + '/refunds',
+      { Authorization: 'Bearer ' + cfg.api_key, 'Content-Type': 'application/json' },
+      { amount: { currency: currency, value: (amountCents / 100).toFixed(2) } });
+    if (res.status >= 200 && res.status < 300 && res.body && res.body.id) return { ok: true, refundRef: res.body.id };
+    return { ok: false, error: (res.body && res.body.detail) || ('Mollie HTTP ' + res.status) };
+  },
+  async stripe_refund(cfg, ref, amountCents) {
+    // ref = checkout session id -> once payment_intent'i bul
+    const s = await httpsRequest('GET', 'https://api.stripe.com/v1/checkout/sessions/' + encodeURIComponent(ref),
+      { Authorization: 'Bearer ' + cfg.api_secret });
+    const pi = s.body && s.body.payment_intent;
+    if (!pi) return { ok: false, error: 'Stripe: payment_intent bulunamadi' };
+    const form = new URLSearchParams();
+    form.set('payment_intent', pi);
+    form.set('amount', String(amountCents));
+    const res = await httpsRequest('POST', 'https://api.stripe.com/v1/refunds',
+      { Authorization: 'Bearer ' + cfg.api_secret, 'Content-Type': 'application/x-www-form-urlencoded' },
+      form.toString());
+    if (res.status >= 200 && res.status < 300 && res.body && res.body.id) return { ok: true, refundRef: res.body.id };
+    return { ok: false, error: (res.body && res.body.error && res.body.error.message) || ('Stripe HTTP ' + res.status) };
+  },
 };
 
 // Durum normalizasyonu: saglayici durumu -> paid | pending | failed
@@ -236,6 +260,19 @@ async function checkStatus(providerName, providerRef) {
   }
 }
 
+// Geri odeme (refund). p: { provider, ref, amountCents, currency }
+// Saglayici API'si ile gercek iade. Simulasyon/desteklenmeyen -> {ok:false, unsupported:true}
+async function refund(p) {
+  const cfg = getConfig(p.provider);
+  if (!cfg || !REAL[p.provider + '_refund']) return { ok: false, unsupported: true, error: 'refund yok: ' + p.provider };
+  try {
+    return await REAL[p.provider + '_refund'](cfg, p.ref, p.amountCents, p.currency);
+  } catch (e) {
+    console.error('Geri odeme hatasi:', e.message);
+    return { ok: false, error: e.message };
+  }
+}
+
 // Simulasyon referansi (aktif saglayici yokken)
 function simRef() { return 'SIM-' + Date.now().toString(36).toUpperCase(); }
 
@@ -253,6 +290,6 @@ function statusSummary() {
 
 module.exports = {
   METHODS, methodLabel, isValidMethod,
-  createPayment, checkStatus, normalizeStatus, simRef,
+  createPayment, checkStatus, normalizeStatus, simRef, refund,
   PROVIDERS, PROVIDER_KEYS, getConfig, allConfigs, availableConfigs, isConfigured, activeFor, statusSummary,
 };
