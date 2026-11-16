@@ -380,7 +380,7 @@ add('GET', '/seller', (ctx) => {
   if (store) {
     earnings = db.prepare(`
       SELECT
-        COALESCE(SUM(CASE WHEN so.payout_status='pending' THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS pending,
+        COALESCE(SUM(CASE WHEN so.payout_status='pending' AND so.return_status!='refunded' THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS pending,
         COALESCE(SUM(CASE WHEN so.payout_status='paid'    THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS paid
       FROM seller_orders so
       WHERE so.store_id=? AND so.order_id IN (SELECT id FROM orders WHERE status='odendi')`).get(store.id);
@@ -459,8 +459,7 @@ add('GET', '/admin', (ctx) => {
     finance = {
       sales: db.prepare('SELECT COALESCE(SUM(total_cents),0) AS n FROM orders').get().n,
       commission: stats.commission,
-      payout: db.prepare('SELECT COALESCE(SUM(subtotal_cents),0) AS n FROM seller_orders').get().n
-              - stats.commission,
+      payout: db.prepare("SELECT COALESCE(SUM(subtotal_cents - commission_cents),0) AS n FROM seller_orders WHERE return_status!='refunded'").get().n,
     };
   }
   ctx.title = 'Admin';
@@ -601,8 +600,8 @@ add('GET', '/admin/payouts', (ctx) => {
   if (!requirePerm(ctx, 'finance')) return;
   const stores = db.prepare(`
     SELECT s.id, s.name, s.slug, u.email AS owner_email,
-      COALESCE(SUM(CASE WHEN so.payout_status='pending' THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS pending_net,
-      COUNT(CASE WHEN so.payout_status='pending' THEN 1 END) AS pending_orders,
+      COALESCE(SUM(CASE WHEN so.payout_status='pending' AND so.return_status!='refunded' THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS pending_net,
+      COUNT(CASE WHEN so.payout_status='pending' AND so.return_status!='refunded' THEN 1 END) AS pending_orders,
       COALESCE(SUM(CASE WHEN so.payout_status='paid'    THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS paid_net
     FROM stores s
     JOIN users u ON u.id = s.user_id
@@ -624,17 +623,70 @@ add('POST', '/admin/payouts/:storeId/pay', (ctx) => {
   const row = db.prepare(`
     SELECT COALESCE(SUM(so.subtotal_cents - so.commission_cents),0) AS net, COUNT(*) AS n
     FROM seller_orders so
-    WHERE so.store_id=? AND so.payout_status='pending'
+    WHERE so.store_id=? AND so.payout_status='pending' AND so.return_status!='refunded'
       AND so.order_id IN (SELECT id FROM orders WHERE status='odendi')`).get(storeId);
   if (!row.n || row.net <= 0) { ctx.flashMsg(ctx.t('fl_payout_none')); return ctx.redirect('/admin/payouts'); }
   db.prepare(`UPDATE seller_orders SET payout_status='paid'
-    WHERE store_id=? AND payout_status='pending'
+    WHERE store_id=? AND payout_status='pending' AND return_status!='refunded'
       AND order_id IN (SELECT id FROM orders WHERE status='odendi')`).run(storeId);
   const note = (ctx.body.note || '').toString().slice(0, 200);
   db.prepare('INSERT INTO payouts (store_id, amount_cents, currency, note) VALUES (?,?,?,?)')
     .run(storeId, row.net, 'EUR', note);
   ctx.flashMsg(ctx.t('fl_payout_done') + ' ' + store.name + ' — ' + H.money(row.net, 'EUR'));
   ctx.redirect('/admin/payouts');
+});
+
+// --- Iadeler / geri odeme (finance yetkisi) ---
+add('GET', '/admin/returns', (ctx) => {
+  if (!requirePerm(ctx, 'finance')) return;
+  const rows = db.prepare(`
+    SELECT r.*, s.name AS store_name, u.email AS buyer_email,
+      o.payment_method, o.payment_ref, so.subtotal_cents, so.currency AS so_currency
+    FROM returns r
+    JOIN stores s ON s.id = r.store_id
+    JOIN users u ON u.id = r.buyer_id
+    JOIN orders o ON o.id = r.order_id
+    JOIN seller_orders so ON so.id = r.seller_order_id
+    ORDER BY CASE r.status WHEN 'requested' THEN 0 ELSE 1 END, r.created_at DESC`).all();
+  ctx.title = 'Iadeler';
+  ctx.send(pages.adminReturns(ctx, { rows }));
+});
+
+// Geri odeme: gercek saglayici varsa API ile; simulasyon/desteklenmiyorsa manuel isaretle
+add('POST', '/admin/returns/:id/refund', async (ctx) => {
+  if (!requirePerm(ctx, 'finance')) return;
+  const r = db.prepare('SELECT * FROM returns WHERE id=?').get(ctx.params.id);
+  if (!r || r.status !== 'requested') { ctx.flashMsg(ctx.t('fl_ret_notfound')); return ctx.redirect('/admin/returns'); }
+  const so = db.prepare('SELECT * FROM seller_orders WHERE id=?').get(r.seller_order_id);
+  const order = db.prepare('SELECT * FROM orders WHERE id=?').get(r.order_id);
+  const amount = so.subtotal_cents;
+  let refundRef = 'manual';
+  if (order.payment_ref && (order.payment_method === 'mollie' || order.payment_method === 'stripe')) {
+    const res = await payment.refund({ provider: order.payment_method, ref: order.payment_ref, amountCents: amount, currency: so.currency });
+    if (res.ok) { refundRef = res.refundRef || 'ok'; }
+    else if (!res.unsupported) { ctx.flashMsg(ctx.t('fl_ret_refund_fail') + (res.error ? ' (' + res.error + ')' : '')); return ctx.redirect('/admin/returns'); }
+  }
+  db.prepare("UPDATE returns SET status='refunded', refund_cents=?, refund_ref=?, admin_note=?, updated_at=datetime('now') WHERE id=?")
+    .run(amount, refundRef, (ctx.body.note || '').toString().slice(0, 200), r.id);
+  db.prepare("UPDATE seller_orders SET return_status='refunded' WHERE id=?").run(r.seller_order_id);
+  // Stok iade
+  const inc = db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?');
+  db.prepare('SELECT product_id, qty FROM order_items WHERE seller_order_id=?').all(r.seller_order_id)
+    .forEach(it => { if (it.product_id) inc.run(it.qty, it.product_id); });
+  sendRefundEmail(r.id, amount, so.currency);
+  ctx.flashMsg(ctx.t('fl_ret_refunded') + ' ' + H.money(amount, so.currency) + (refundRef === 'manual' ? ' (' + ctx.t('fl_ret_manual') + ')' : ''));
+  ctx.redirect('/admin/returns');
+});
+
+add('POST', '/admin/returns/:id/reject', (ctx) => {
+  if (!requirePerm(ctx, 'finance')) return;
+  const r = db.prepare('SELECT * FROM returns WHERE id=?').get(ctx.params.id);
+  if (!r || r.status !== 'requested') { ctx.flashMsg(ctx.t('fl_ret_notfound')); return ctx.redirect('/admin/returns'); }
+  db.prepare("UPDATE returns SET status='rejected', admin_note=?, updated_at=datetime('now') WHERE id=?")
+    .run((ctx.body.note || '').toString().slice(0, 200), r.id);
+  db.prepare("UPDATE seller_orders SET return_status='rejected' WHERE id=?").run(r.seller_order_id);
+  ctx.flashMsg(ctx.t('fl_ret_rejected'));
+  ctx.redirect('/admin/returns');
 });
 
 add('POST', '/admin/staff/:id/delete', (ctx) => {
@@ -790,6 +842,24 @@ function sendOrderEmails(orderId) {
   }
 }
 
+// Iade onaylaninca aliciya geri odeme bilgilendirme maili (fire-and-forget)
+function sendRefundEmail(returnId, amountCents, currency) {
+  try {
+    const r = db.prepare(`SELECT r.order_id, u.email AS buyer_email FROM returns r JOIN users u ON u.id=r.buyer_id WHERE r.id=?`).get(returnId);
+    if (!r) return;
+    const body =
+      '<p>Je retour voor bestelling #' + r.order_id + ' is goedgekeurd.</p>' +
+      '<p><b>Terugbetaald: ' + H.money(amountCents, currency) + '</b></p>' +
+      '<p style="color:#71717a;font-size:13px">De terugbetaling verschijnt binnen enkele dagen op je rekening of kaart.</p>';
+    mailer.send({
+      to: r.buyer_email,
+      subject: config.brand.name + ' — Terugbetaling bestelling #' + r.order_id,
+      html: mailer.layout('Terugbetaling verwerkt', body),
+      text: 'Je retour voor bestelling #' + r.order_id + ' is goedgekeurd. Terugbetaald: ' + H.money(amountCents, currency) + '.',
+    }).catch(() => {});
+  } catch (e) { console.log('[MAIL] sendRefundEmail hata:', e && e.message); }
+}
+
 add('POST', '/checkout', async (ctx) => {
   if (!requireLogin(ctx)) return;
   const rows = cartRows(ctx.user.id);
@@ -926,9 +996,38 @@ add('GET', '/orders/:id', (ctx) => {
   }
   const sellerOrders = db.prepare(`SELECT so.*, s.name AS store_name, s.slug AS store_slug
     FROM seller_orders so JOIN stores s ON s.id=so.store_id WHERE so.order_id=?`).all(order.id);
-  sellerOrders.forEach(so => { so.items = db.prepare('SELECT * FROM order_items WHERE seller_order_id=?').all(so.id); });
+  sellerOrders.forEach(so => {
+    so.items = db.prepare('SELECT * FROM order_items WHERE seller_order_id=?').all(so.id);
+    so.canReturn = returnEligible(order, so);
+  });
   ctx.title = 'Siparis #' + order.id;
   ctx.send(pages.orderDetail(ctx, { order, sellerOrders }));
+});
+
+// Iade politikasi: alinmis (odendi) + 14 gun icinde + daha once talep edilmemis
+const RETURN_DAYS = 14;
+function returnEligible(order, so) {
+  if (!order || order.status !== 'odendi') return false;
+  if (!so || (so.return_status && so.return_status !== 'none')) return false;
+  const ms = new Date(String(order.created_at || '').replace(' ', 'T') + 'Z').getTime();
+  if (!ms) return true;
+  return (Date.now() - ms) / 86400000 <= RETURN_DAYS;
+}
+
+// Alici: bir satici-siparisi icin iade talebi olustur
+add('POST', '/returns', (ctx) => {
+  if (!requireLogin(ctx)) return;
+  const so = db.prepare(`SELECT so.*, o.buyer_id, o.status AS order_status, o.created_at AS order_date
+    FROM seller_orders so JOIN orders o ON o.id = so.order_id WHERE so.id = ?`).get(ctx.body.seller_order_id);
+  if (!so || so.buyer_id !== ctx.user.id) { ctx.flashMsg(ctx.t('fl_order_notfound')); return ctx.redirect('/orders'); }
+  const order = { status: so.order_status, created_at: so.order_date };
+  if (!returnEligible(order, so)) { ctx.flashMsg(ctx.t('fl_ret_ineligible')); return ctx.redirect('/orders/' + so.order_id); }
+  const reason = (ctx.body.reason || '').toString().slice(0, 500);
+  db.prepare("INSERT INTO returns (seller_order_id,order_id,buyer_id,store_id,reason,status) VALUES (?,?,?,?,?,'requested')")
+    .run(so.id, so.order_id, ctx.user.id, so.store_id, reason);
+  db.prepare("UPDATE seller_orders SET return_status='requested' WHERE id=?").run(so.id);
+  ctx.flashMsg(ctx.t('fl_ret_created'));
+  ctx.redirect('/orders/' + so.order_id);
 });
 
 add('GET', '/seller/orders', (ctx) => {
