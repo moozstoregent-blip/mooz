@@ -384,6 +384,23 @@ const D = {
   fl_ret_refund_fail: { tr: 'Geri odeme basarisiz.', nl: 'Terugbetaling mislukt.', fr: 'Échec du remboursement.', en: 'Refund failed.' },
   fl_ret_manual: { tr: 'elle isaretlendi', nl: 'handmatig gemarkeerd', fr: 'marqué manuellement', en: 'marked manually' },
   fl_order_notfound: { tr: 'Siparis bulunamadi.', nl: 'Bestelling niet gevonden.', fr: 'Commande introuvable.', en: 'Order not found.' },
+
+  // Guvenlik / dogrulama
+  fl_too_many: { tr: 'Cok fazla deneme. Lutfen birkac dakika sonra tekrar dene.', nl: 'Te veel pogingen. Probeer het over enkele minuten opnieuw.', fr: 'Trop de tentatives. Réessayez dans quelques minutes.', en: 'Too many attempts. Please try again in a few minutes.' },
+  fl_email_invalid: { tr: 'Gecerli bir e-posta adresi gir.', nl: 'Voer een geldig e-mailadres in.', fr: 'Saisissez une adresse e-mail valide.', en: 'Enter a valid e-mail address.' },
+  fl_pw_short: { tr: 'Sifre en az 6 karakter olmali.', nl: 'Wachtwoord moet minstens 6 tekens zijn.', fr: 'Le mot de passe doit comporter au moins 6 caractères.', en: 'Password must be at least 6 characters.' },
+
+  // Sifre sifirlama
+  fw_link: { tr: 'Sifremi unuttum', nl: 'Wachtwoord vergeten?', fr: 'Mot de passe oublié ?', en: 'Forgot password?' },
+  fw_title: { tr: 'Sifremi unuttum', nl: 'Wachtwoord vergeten', fr: 'Mot de passe oublié', en: 'Forgot password' },
+  fw_sub: { tr: 'E-posta adresini gir; sifre sifirlama linki gonderelim.', nl: 'Voer je e-mail in; we sturen een resetlink.', fr: 'Saisissez votre e-mail ; nous enverrons un lien de réinitialisation.', en: 'Enter your e-mail; we will send a reset link.' },
+  fw_send: { tr: 'Sifirlama linki gonder', nl: 'Verstuur resetlink', fr: 'Envoyer le lien', en: 'Send reset link' },
+  fl_fw_sent: { tr: 'Eger bu e-posta kayitliysa, sifirlama linki gonderildi.', nl: 'Als dit e-mailadres bestaat, is er een resetlink verstuurd.', fr: 'Si cet e-mail existe, un lien de réinitialisation a été envoyé.', en: 'If that e-mail exists, a reset link has been sent.' },
+  rp_title: { tr: 'Yeni sifre belirle', nl: 'Nieuw wachtwoord instellen', fr: 'Définir un nouveau mot de passe', en: 'Set a new password' },
+  rp_new_pw: { tr: 'Yeni sifre', nl: 'Nieuw wachtwoord', fr: 'Nouveau mot de passe', en: 'New password' },
+  rp_save: { tr: 'Sifreyi kaydet', nl: 'Wachtwoord opslaan', fr: 'Enregistrer', en: 'Save password' },
+  fl_rp_invalid: { tr: 'Link gecersiz veya suresi dolmus. Tekrar dene.', nl: 'Link ongeldig of verlopen. Probeer opnieuw.', fr: 'Lien invalide ou expiré. Réessayez.', en: 'Link invalid or expired. Try again.' },
+  fl_rp_done: { tr: 'Sifren guncellendi. Simdi giris yapabilirsin.', nl: 'Je wachtwoord is bijgewerkt. Je kunt nu inloggen.', fr: 'Votre mot de passe est mis à jour. Vous pouvez vous connecter.', en: 'Your password has been updated. You can now log in.' },
 };
 
 function t(lang, key) {
