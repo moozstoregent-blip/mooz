@@ -135,6 +135,21 @@ db.exec(`
     note        TEXT DEFAULT '',
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS returns (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    seller_order_id INTEGER NOT NULL REFERENCES seller_orders(id),
+    order_id        INTEGER NOT NULL REFERENCES orders(id),
+    buyer_id        INTEGER NOT NULL REFERENCES users(id),
+    store_id        INTEGER NOT NULL REFERENCES stores(id),
+    reason          TEXT DEFAULT '',
+    status          TEXT NOT NULL DEFAULT 'requested',  -- requested | refunded | rejected
+    refund_cents    INTEGER DEFAULT 0,
+    refund_ref      TEXT DEFAULT '',
+    admin_note      TEXT DEFAULT '',
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // Odeme saglayici satirlarini garanti et (keyler bos; admin panelden girilir)
@@ -204,6 +219,7 @@ ensureColumn('orders', 'discount_cents', 'INTEGER DEFAULT 0');
 ensureColumn('orders', 'coupon_code', "TEXT DEFAULT ''");
 ensureColumn('seller_orders', 'seen', 'INTEGER DEFAULT 0');
 ensureColumn('seller_orders', 'payout_status', "TEXT DEFAULT 'pending'");  // pending | paid
+ensureColumn('seller_orders', 'return_status', "TEXT DEFAULT 'none'");     // none | requested | refunded | rejected
 
 seed();
 
