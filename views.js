@@ -729,8 +729,10 @@ const pages = {
       const provLabel = (r.payment_method === 'mollie' || r.payment_method === 'stripe')
         ? (payment.PROVIDERS[r.payment_method] ? payment.PROVIDERS[r.payment_method].label : r.payment_method)
         : t('rt_manual_src');
+      const fullAmt = (r.subtotal_cents / 100).toFixed(2);
       const actions = r.status === 'requested' ? `
-        <form action="/admin/returns/${r.id}/refund" method="post" onsubmit="return confirm('${esc(t('rt_confirm_refund'))} ${esc(amount)}?')" class="ret-form">
+        <form action="/admin/returns/${r.id}/refund" method="post" onsubmit="return confirm('${esc(t('rt_confirm_refund'))}')" class="ret-form">
+          <input type="number" name="amount" value="${fullAmt}" min="0.01" max="${fullAmt}" step="0.01" class="po-note" title="${esc(t('rt_amount_hint'))}" style="width:90px">
           <button class="btn btn-brand" type="submit">${esc(t('rt_refund_btn'))}</button>
         </form>
         <form action="/admin/returns/${r.id}/reject" method="post" onsubmit="return confirm('${esc(t('rt_confirm_reject'))}')" class="ret-form">
