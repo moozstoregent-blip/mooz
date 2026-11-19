@@ -421,7 +421,7 @@ const pages = {
         ${store.status === 'active' ? `<a class="btn btn-ghost" href="/store/${esc(store.slug)}">${esc(t('sp_view_store'))}</a>` : ''}
       </div>
       <div class="auth-card" style="max-width:none;margin:18px 0 0">
-        <h3>\u{1FAAA} ${esc(t('kyc_title'))}</h3>
+        <h3>\u{1F3E2} ${esc(t('kyc_title'))}</h3>
         <p class="muted small">${esc(t('kyc_desc'))}</p>
         <form action="/seller/kyc" method="post">
           <label>${esc(t('kyc_company'))}</label><input name="company_name" value="${esc(store.company_name || '')}" maxlength="120">
