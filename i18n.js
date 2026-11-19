@@ -420,6 +420,18 @@ const D = {
   pay_provider: { tr: 'Odeme yontemi', nl: 'Betaalmethode', fr: 'Méthode de paiement', en: 'Payment method' },
   fl_pay_choose: { tr: 'Lutfen bir odeme yontemi sec.', nl: 'Kies een betaalmethode.', fr: 'Choisissez une méthode de paiement.', en: 'Please choose a payment method.' },
   pay_multi_note: { tr: 'Birden fazla saglayici aktif edersen musteri odeme sayfasinda hangisiyle odeyecegini secer. Tek aktifse direkt o kullanilir.', nl: 'Activeer je meerdere providers, dan kiest de klant er een bij het afrekenen. Bij één actieve wordt die direct gebruikt.', fr: 'Si vous activez plusieurs prestataires, le client en choisit un au paiement. Avec un seul actif, il est utilisé directement.', en: 'If you enable more than one provider, the customer picks one at checkout. With a single active one, it is used directly.' },
+
+  // Satici KYC / isletme bilgileri
+  kyc_title: { tr: 'Isletme bilgileri (KYC)', nl: 'Bedrijfsgegevens (KYC)', fr: 'Infos entreprise (KYC)', en: 'Business details (KYC)' },
+  kyc_desc: { tr: 'Odeme ve onay icin isletme bilgilerini gir. Admin mağazani onaylarken bunlari gorur.', nl: 'Vul je bedrijfsgegevens in voor uitbetaling en goedkeuring. De admin ziet deze bij het goedkeuren.', fr: 'Renseignez vos informations pour le paiement et la validation. L\'admin les voit à l\'approbation.', en: 'Enter your business details for payout and approval. The admin sees these when approving.' },
+  kyc_company: { tr: 'Firma adi', nl: 'Bedrijfsnaam', fr: 'Raison sociale', en: 'Company name' },
+  kyc_kbo: { tr: 'Ticaret sicil no (KBO)', nl: 'Ondernemingsnummer (KBO)', fr: "Numéro d'entreprise (BCE)", en: 'Company number (KBO)' },
+  kyc_vat: { tr: 'KDV / BTW no', nl: 'BTW-nummer', fr: 'Numéro de TVA', en: 'VAT number' },
+  kyc_iban: { tr: 'IBAN (odeme icin)', nl: 'IBAN (voor uitbetaling)', fr: 'IBAN (pour paiement)', en: 'IBAN (for payout)' },
+  kyc_phone: { tr: 'Telefon', nl: 'Telefoon', fr: 'Téléphone', en: 'Phone' },
+  kyc_ok: { tr: 'KYC tamam', nl: 'KYC compleet', fr: 'KYC complet', en: 'KYC complete' },
+  kyc_missing: { tr: 'KYC eksik', nl: 'KYC onvolledig', fr: 'KYC incomplet', en: 'KYC incomplete' },
+  fl_kyc_saved: { tr: 'Isletme bilgilerin kaydedildi.', nl: 'Je bedrijfsgegevens zijn opgeslagen.', fr: 'Vos informations sont enregistrées.', en: 'Your business details were saved.' },
 };
 
 function t(lang, key) {
