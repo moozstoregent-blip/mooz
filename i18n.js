@@ -376,6 +376,8 @@ const D = {
   rt_confirm_reject: { tr: 'Iade talebi reddedilsin mi?', nl: 'Retour afwijzen?', fr: 'Refuser le retour ?', en: 'Reject the return?' },
   rt_ref: { tr: 'Referans', nl: 'Referentie', fr: 'Référence', en: 'Reference' },
   rt_manual_src: { tr: 'Simulasyon / elle', nl: 'Simulatie / handmatig', fr: 'Simulation / manuel', en: 'Simulation / manual' },
+  rt_partial: { tr: 'kismi iade', nl: 'gedeeltelijke terugbetaling', fr: 'remboursement partiel', en: 'partial refund' },
+  rt_amount_hint: { tr: 'Iade tutari (tam tutara kadar; dusurerek kismi iade yapabilirsin)', nl: 'Terugbetaalbedrag (tot het volledige bedrag; verlaag voor gedeeltelijk)', fr: 'Montant à rembourser (jusqu\'au total ; réduire pour partiel)', en: 'Refund amount (up to the total; lower it for a partial refund)' },
   fl_ret_created: { tr: 'Iade talebin olusturuldu. Inceledikten sonra bilgilendirileceksin.', nl: 'Je retouraanvraag is aangemaakt. Je wordt na beoordeling op de hoogte gebracht.', fr: 'Votre demande de retour est créée. Vous serez informé après examen.', en: 'Your return request was created. You will be notified after review.' },
   fl_ret_ineligible: { tr: 'Bu siparis icin iade talep edilemez (odeme/14 gun/zaten talep).', nl: 'Retour niet mogelijk voor deze bestelling (betaling/14 dagen/reeds aangevraagd).', fr: 'Retour impossible pour cette commande (paiement/14 jours/déjà demandé).', en: 'Return not possible for this order (payment/14 days/already requested).' },
   fl_ret_notfound: { tr: 'Iade talebi bulunamadi.', nl: 'Retouraanvraag niet gevonden.', fr: 'Demande de retour introuvable.', en: 'Return request not found.' },
