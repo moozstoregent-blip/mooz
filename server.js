@@ -483,7 +483,9 @@ add('GET', '/seller', (ctx) => {
   if (store) {
     earnings = db.prepare(`
       SELECT
-        COALESCE(SUM(CASE WHEN so.payout_status='pending' AND so.return_status!='refunded' THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS pending,
+        COALESCE(SUM(CASE WHEN so.payout_status='pending'
+          THEN MAX(0, (so.subtotal_cents - so.commission_cents) - (SELECT COALESCE(SUM(refund_cents),0) FROM returns WHERE seller_order_id=so.id AND status='refunded'))
+          ELSE 0 END),0) AS pending,
         COALESCE(SUM(CASE WHEN so.payout_status='paid'    THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS paid
       FROM seller_orders so
       WHERE so.store_id=? AND so.order_id IN (SELECT id FROM orders WHERE status='odendi')`).get(store.id);
@@ -562,7 +564,7 @@ add('GET', '/admin', (ctx) => {
     finance = {
       sales: db.prepare('SELECT COALESCE(SUM(total_cents),0) AS n FROM orders').get().n,
       commission: stats.commission,
-      payout: db.prepare("SELECT COALESCE(SUM(subtotal_cents - commission_cents),0) AS n FROM seller_orders WHERE return_status!='refunded'").get().n,
+      payout: db.prepare(`SELECT COALESCE(SUM(MAX(0,(so.subtotal_cents - so.commission_cents) - (SELECT COALESCE(SUM(refund_cents),0) FROM returns WHERE seller_order_id=so.id AND status='refunded'))),0) AS n FROM seller_orders so`).get().n,
     };
   }
   ctx.title = 'Admin';
@@ -699,8 +701,12 @@ add('GET', '/admin/payouts', (ctx) => {
   if (!requirePerm(ctx, 'finance')) return;
   const stores = db.prepare(`
     SELECT s.id, s.name, s.slug, u.email AS owner_email,
-      COALESCE(SUM(CASE WHEN so.payout_status='pending' AND so.return_status!='refunded' THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS pending_net,
-      COUNT(CASE WHEN so.payout_status='pending' AND so.return_status!='refunded' THEN 1 END) AS pending_orders,
+      COALESCE(SUM(CASE WHEN so.payout_status='pending'
+        THEN MAX(0, (so.subtotal_cents - so.commission_cents) - (SELECT COALESCE(SUM(refund_cents),0) FROM returns WHERE seller_order_id=so.id AND status='refunded'))
+        ELSE 0 END),0) AS pending_net,
+      COUNT(CASE WHEN so.payout_status='pending'
+        AND (so.subtotal_cents - so.commission_cents) - (SELECT COALESCE(SUM(refund_cents),0) FROM returns WHERE seller_order_id=so.id AND status='refunded') > 0
+        THEN 1 END) AS pending_orders,
       COALESCE(SUM(CASE WHEN so.payout_status='paid'    THEN so.subtotal_cents - so.commission_cents ELSE 0 END),0) AS paid_net
     FROM stores s
     JOIN users u ON u.id = s.user_id
@@ -720,13 +726,14 @@ add('POST', '/admin/payouts/:storeId/pay', (ctx) => {
   const store = db.prepare('SELECT id,name FROM stores WHERE id=?').get(storeId);
   if (!store) { ctx.flashMsg(ctx.t('fl_store_notfound')); return ctx.redirect('/admin/payouts'); }
   const row = db.prepare(`
-    SELECT COALESCE(SUM(so.subtotal_cents - so.commission_cents),0) AS net, COUNT(*) AS n
+    SELECT COALESCE(SUM(MAX(0, (so.subtotal_cents - so.commission_cents) - (SELECT COALESCE(SUM(refund_cents),0) FROM returns WHERE seller_order_id=so.id AND status='refunded'))),0) AS net,
+      COUNT(*) AS n
     FROM seller_orders so
-    WHERE so.store_id=? AND so.payout_status='pending' AND so.return_status!='refunded'
+    WHERE so.store_id=? AND so.payout_status='pending'
       AND so.order_id IN (SELECT id FROM orders WHERE status='odendi')`).get(storeId);
   if (!row.n || row.net <= 0) { ctx.flashMsg(ctx.t('fl_payout_none')); return ctx.redirect('/admin/payouts'); }
   db.prepare(`UPDATE seller_orders SET payout_status='paid'
-    WHERE store_id=? AND payout_status='pending' AND return_status!='refunded'
+    WHERE store_id=? AND payout_status='pending'
       AND order_id IN (SELECT id FROM orders WHERE status='odendi')`).run(storeId);
   const note = (ctx.body.note || '').toString().slice(0, 200);
   db.prepare('INSERT INTO payouts (store_id, amount_cents, currency, note) VALUES (?,?,?,?)')
@@ -758,7 +765,14 @@ add('POST', '/admin/returns/:id/refund', async (ctx) => {
   if (!r || r.status !== 'requested') { ctx.flashMsg(ctx.t('fl_ret_notfound')); return ctx.redirect('/admin/returns'); }
   const so = db.prepare('SELECT * FROM seller_orders WHERE id=?').get(r.seller_order_id);
   const order = db.prepare('SELECT * FROM orders WHERE id=?').get(r.order_id);
-  const amount = so.subtotal_cents;
+  // Tutar: admin kismi girebilir (bos/gecersiz -> tam tutar). 1..subtotal araligina sikistir.
+  let amount = so.subtotal_cents;
+  const raw = String(ctx.body.amount || '').replace(',', '.').trim();
+  if (raw) {
+    const cents = Math.round(parseFloat(raw) * 100);
+    if (isFinite(cents) && cents > 0) amount = Math.min(cents, so.subtotal_cents);
+  }
+  const isFull = amount >= so.subtotal_cents;
   let refundRef = 'manual';
   if (order.payment_ref && (order.payment_method === 'mollie' || order.payment_method === 'stripe')) {
     const res = await payment.refund({ provider: order.payment_method, ref: order.payment_ref, amountCents: amount, currency: so.currency });
@@ -768,12 +782,14 @@ add('POST', '/admin/returns/:id/refund', async (ctx) => {
   db.prepare("UPDATE returns SET status='refunded', refund_cents=?, refund_ref=?, admin_note=?, updated_at=datetime('now') WHERE id=?")
     .run(amount, refundRef, (ctx.body.note || '').toString().slice(0, 200), r.id);
   db.prepare("UPDATE seller_orders SET return_status='refunded' WHERE id=?").run(r.seller_order_id);
-  // Stok iade
-  const inc = db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?');
-  db.prepare('SELECT product_id, qty FROM order_items WHERE seller_order_id=?').all(r.seller_order_id)
-    .forEach(it => { if (it.product_id) inc.run(it.qty, it.product_id); });
+  // Stok sadece TAM iadede geri yuklenir (kismi iade: urun musteride kalir)
+  if (isFull) {
+    const inc = db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?');
+    db.prepare('SELECT product_id, qty FROM order_items WHERE seller_order_id=?').all(r.seller_order_id)
+      .forEach(it => { if (it.product_id) inc.run(it.qty, it.product_id); });
+  }
   sendRefundEmail(r.id, amount, so.currency);
-  ctx.flashMsg(ctx.t('fl_ret_refunded') + ' ' + H.money(amount, so.currency) + (refundRef === 'manual' ? ' (' + ctx.t('fl_ret_manual') + ')' : ''));
+  ctx.flashMsg(ctx.t('fl_ret_refunded') + ' ' + H.money(amount, so.currency) + (isFull ? '' : ' (' + ctx.t('rt_partial') + ')') + (refundRef === 'manual' ? ' (' + ctx.t('fl_ret_manual') + ')' : ''));
   ctx.redirect('/admin/returns');
 });
 
