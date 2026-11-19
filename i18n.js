@@ -413,6 +413,11 @@ const D = {
   ao_sellers: { tr: 'Satici', nl: 'Verkopers', fr: 'Vendeurs', en: 'Sellers' },
   th_buyer: { tr: 'Alici', nl: 'Koper', fr: 'Acheteur', en: 'Buyer' },
   ao_csv: { tr: 'CSV indir', nl: 'CSV downloaden', fr: 'Télécharger CSV', en: 'Download CSV' },
+
+  // Checkout'ta odeme saglayici secimi
+  pay_provider: { tr: 'Odeme yontemi', nl: 'Betaalmethode', fr: 'Méthode de paiement', en: 'Payment method' },
+  fl_pay_choose: { tr: 'Lutfen bir odeme yontemi sec.', nl: 'Kies een betaalmethode.', fr: 'Choisissez une méthode de paiement.', en: 'Please choose a payment method.' },
+  pay_multi_note: { tr: 'Birden fazla saglayici aktif edersen musteri odeme sayfasinda hangisiyle odeyecegini secer. Tek aktifse direkt o kullanilir.', nl: 'Activeer je meerdere providers, dan kiest de klant er een bij het afrekenen. Bij één actieve wordt die direct gebruikt.', fr: 'Si vous activez plusieurs prestataires, le client en choisit un au paiement. Avec un seul actif, il est utilisé directement.', en: 'If you enable more than one provider, the customer picks one at checkout. With a single active one, it is used directly.' },
 };
 
 function t(lang, key) {
