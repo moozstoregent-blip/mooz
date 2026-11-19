@@ -401,6 +401,18 @@ const D = {
   rp_save: { tr: 'Sifreyi kaydet', nl: 'Wachtwoord opslaan', fr: 'Enregistrer', en: 'Save password' },
   fl_rp_invalid: { tr: 'Link gecersiz veya suresi dolmus. Tekrar dene.', nl: 'Link ongeldig of verlopen. Probeer opnieuw.', fr: 'Lien invalide ou expiré. Réessayez.', en: 'Link invalid or expired. Try again.' },
   fl_rp_done: { tr: 'Sifren guncellendi. Simdi giris yapabilirsin.', nl: 'Je wachtwoord is bijgewerkt. Je kunt nu inloggen.', fr: 'Votre mot de passe est mis à jour. Vous pouvez vous connecter.', en: 'Your password has been updated. You can now log in.' },
+
+  // Admin siparis yonetimi
+  ao_nav: { tr: 'Siparisler', nl: 'Bestellingen', fr: 'Commandes', en: 'Orders' },
+  ao_title: { tr: 'Siparis Yonetimi', nl: 'Bestelbeheer', fr: 'Gestion des commandes', en: 'Order management' },
+  ao_sub: { tr: 'Tum siparisleri gor, filtrele ve ara', nl: 'Bekijk, filter en zoek alle bestellingen', fr: 'Voir, filtrer et rechercher toutes les commandes', en: 'View, filter and search all orders' },
+  ao_all: { tr: 'Tumu', nl: 'Alle', fr: 'Toutes', en: 'All' },
+  ao_view: { tr: 'Detay', nl: 'Details', fr: 'Détails', en: 'Details' },
+  ao_none: { tr: 'Siparis yok', nl: 'Geen bestellingen', fr: 'Aucune commande', en: 'No orders' },
+  ao_search_ph: { tr: 'E-posta, isim veya #no', nl: 'E-mail, naam of #nr', fr: 'E-mail, nom ou #no', en: 'E-mail, name or #no' },
+  ao_sellers: { tr: 'Satici', nl: 'Verkopers', fr: 'Vendeurs', en: 'Sellers' },
+  th_buyer: { tr: 'Alici', nl: 'Koper', fr: 'Acheteur', en: 'Buyer' },
+  ao_csv: { tr: 'CSV indir', nl: 'CSV downloaden', fr: 'Télécharger CSV', en: 'Download CSV' },
 };
 
 function t(lang, key) {
