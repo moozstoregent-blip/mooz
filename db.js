@@ -236,6 +236,12 @@ ensureColumn('orders', 'coupon_code', "TEXT DEFAULT ''");
 ensureColumn('seller_orders', 'seen', 'INTEGER DEFAULT 0');
 ensureColumn('seller_orders', 'payout_status', "TEXT DEFAULT 'pending'");  // pending | paid
 ensureColumn('seller_orders', 'return_status', "TEXT DEFAULT 'none'");     // none | requested | refunded | rejected
+// Satici KYC / isletme bilgileri
+ensureColumn('stores', 'company_name', "TEXT DEFAULT ''");
+ensureColumn('stores', 'kbo', "TEXT DEFAULT ''");          // ondernemingsnummer
+ensureColumn('stores', 'vat_number', "TEXT DEFAULT ''");   // BTW no
+ensureColumn('stores', 'iban', "TEXT DEFAULT ''");
+ensureColumn('stores', 'phone', "TEXT DEFAULT ''");
 
 seed();
 
