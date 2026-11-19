@@ -528,9 +528,22 @@ add('POST', '/seller/products', (ctx) => {
 
 add('POST', '/seller/store', (ctx) => {
   if (!requireRole(ctx, 'seller')) return;
+  const b = ctx.body;
   db.prepare('UPDATE stores SET description = ? WHERE id = ?')
-    .run((ctx.body.description || '').slice(0, 300), ctx.myStore.id);
+    .run((b.description || '').slice(0, 300), ctx.myStore.id);
   ctx.flashMsg(ctx.t('fl_store_updated'));
+  ctx.redirect('/seller');
+});
+
+// Satici KYC / isletme bilgileri kaydet
+add('POST', '/seller/kyc', (ctx) => {
+  if (!requireRole(ctx, 'seller')) return;
+  if (!ctx.myStore) { ctx.flashMsg(ctx.t('fl_store_notfound')); return ctx.redirect('/seller'); }
+  const b = ctx.body;
+  const cut = (s, n) => (s || '').toString().trim().slice(0, n);
+  db.prepare('UPDATE stores SET company_name=?, kbo=?, vat_number=?, iban=?, phone=? WHERE id=?')
+    .run(cut(b.company_name, 120), cut(b.kbo, 40), cut(b.vat_number, 40), cut(b.iban, 40).replace(/\s+/g, ''), cut(b.phone, 40), ctx.myStore.id);
+  ctx.flashMsg(ctx.t('fl_kyc_saved'));
   ctx.redirect('/seller');
 });
 
