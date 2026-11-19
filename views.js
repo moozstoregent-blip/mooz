@@ -495,6 +495,7 @@ const pages = {
     if (ctx.hasPerm('finance')) navLinks.push(`<a class="btn btn-light" href="/admin/payments">${esc(t('pay_nav'))}</a>`);
     if (ctx.hasPerm('finance')) navLinks.push(`<a class="btn btn-light" href="/admin/payouts">${esc(t('po_nav'))}</a>`);
     if (ctx.hasPerm('finance')) navLinks.push(`<a class="btn btn-light" href="/admin/returns">${esc(t('rt_nav'))}</a>`);
+    if (ctx.hasPerm('support')) navLinks.push(`<a class="btn btn-light" href="/admin/orders">${esc(t('ao_nav'))}</a>`);
     const navBar = navLinks.length ? `<div class="admin-nav">${navLinks.join('')}</div>` : '';
 
     // Finans ozeti (sadece finance yetkisi)
@@ -750,6 +751,38 @@ const pages = {
       <div class="table-wrap"><table class="ptable">
         <thead><tr><th>${esc(t('po_th_date'))}</th><th>${esc(t('th_store'))} / ${esc(t('th_owner'))}</th><th>${esc(t('po_th_amount'))}</th><th>${esc(t('rt_reason'))}</th><th>${esc(t('status'))}</th><th>${esc(t('th_action'))}</th></tr></thead>
         <tbody>${body}</tbody></table></div>`);
+  },
+
+  // Admin siparis yonetimi (support): filtrelenebilir siparis listesi
+  adminOrders(ctx, { orders, status, q, counts }) {
+    const t = ctx.t;
+    const tab = (val, label, n) => `<a class="btn ${status === val ? 'btn-brand' : 'btn-light'}" href="/admin/orders?status=${val}">${esc(label)} (${n})</a>`;
+    const rows = orders.length ? orders.map(o => `<tr>
+      <td><a href="/orders/${o.id}"><strong>#${o.id}</strong></a><br><span class="muted small">${esc((o.created_at || '').slice(0, 16))}</span></td>
+      <td>${esc(o.buyer_name || '')}<br><span class="muted small">${esc(o.buyer_email)}</span></td>
+      <td><strong>${money(o.total_cents, o.currency)}</strong></td>
+      <td>${esc(payProviderLabel(o.payment_method))}</td>
+      <td>${o.seller_count}</td>
+      <td>${orderBadge(t, o.status)}</td>
+      <td><a class="link-ok" href="/orders/${o.id}">${esc(t('ao_view'))}</a></td></tr>`).join('')
+      : `<tr><td colspan="7" class="muted">${esc(t('ao_none'))}</td></tr>`;
+    return layout(ctx, `
+      <div class="panel-head admin"><div><h1>${esc(t('ao_title'))}</h1><p class="muted">${esc(t('ao_sub'))}</p></div>
+        <div style="display:flex;gap:8px"><a class="btn btn-light" href="/admin/orders.csv">⬇ ${esc(t('ao_csv'))}</a><a class="btn btn-light" href="/admin">&larr; ${esc(t('st_back'))}</a></div></div>
+      <div class="admin-nav">
+        ${tab('', t('ao_all'), counts.all)}
+        ${tab('odendi', t('paid'), counts.odendi)}
+        ${tab('pending', t('ord_pending'), counts.pending)}
+        ${tab('iptal', t('ord_cancelled'), counts.iptal)}
+      </div>
+      <form action="/admin/orders" method="get" class="coupon-form" style="margin:12px 0">
+        ${status ? `<input type="hidden" name="status" value="${esc(status)}">` : ''}
+        <input type="text" name="q" value="${esc(q || '')}" placeholder="${esc(t('ao_search_ph'))}" maxlength="80">
+        <button class="btn btn-light" type="submit">${esc(t('search'))}</button>
+      </form>
+      <div class="table-wrap"><table class="ptable">
+        <thead><tr><th>${esc(t('order'))}</th><th>${esc(t('th_buyer'))}</th><th>${esc(t('po_th_amount'))}</th><th>${esc(t('pay_nav'))}</th><th>${esc(t('ao_sellers'))}</th><th>${esc(t('status'))}</th><th>${esc(t('th_action'))}</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`);
   },
 
   cart(ctx, { rows, coupon }) {
