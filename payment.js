@@ -135,12 +135,16 @@ function isConfigured(cfg) {
   return meta.needs.every(f => (cfg[f] || '').trim().length > 0);
 }
 
-// Para birimine gore aktif + anahtari girilmis saglayici
+// Para birimine gore aktif + anahtari girilmis saglayici (ilk)
 function activeFor(currency) {
+  return activeProvidersFor(currency)[0] || null;
+}
+
+// Para birimine gore TUM aktif + konfigure saglayicilar (musteri checkout'ta secebilir)
+function activeProvidersFor(currency) {
   const cur = (currency || 'EUR').toUpperCase();
-  const candidates = allConfigs().filter(c =>
+  return allConfigs().filter(c =>
     c.active && isConfigured(c) && PROVIDERS[c.provider].currencies.includes(cur));
-  return candidates[0] || null;
 }
 
 // --- Gercek saglayici cagrilari (node:https) ------------------------------
@@ -291,5 +295,5 @@ function statusSummary() {
 module.exports = {
   METHODS, methodLabel, isValidMethod,
   createPayment, checkStatus, normalizeStatus, simRef, refund,
-  PROVIDERS, PROVIDER_KEYS, getConfig, allConfigs, availableConfigs, isConfigured, activeFor, statusSummary,
+  PROVIDERS, PROVIDER_KEYS, getConfig, allConfigs, availableConfigs, isConfigured, activeFor, activeProvidersFor, statusSummary,
 };
