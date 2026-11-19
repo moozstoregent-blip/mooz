@@ -420,6 +420,22 @@ const pages = {
         <a class="btn btn-ghost nav-badge-wrap" href="/seller/orders">${esc(t('sp_incoming'))}${ctx.newOrders ? `<span class="nav-badge">${ctx.newOrders}</span>` : ''}</a>
         ${store.status === 'active' ? `<a class="btn btn-ghost" href="/store/${esc(store.slug)}">${esc(t('sp_view_store'))}</a>` : ''}
       </div>
+      <div class="auth-card" style="max-width:none;margin:18px 0 0">
+        <h3>\u{1FAAA} ${esc(t('kyc_title'))}</h3>
+        <p class="muted small">${esc(t('kyc_desc'))}</p>
+        <form action="/seller/kyc" method="post">
+          <label>${esc(t('kyc_company'))}</label><input name="company_name" value="${esc(store.company_name || '')}" maxlength="120">
+          <div class="form-row">
+            <div><label>${esc(t('kyc_kbo'))}</label><input name="kbo" value="${esc(store.kbo || '')}" maxlength="40"></div>
+            <div><label>${esc(t('kyc_vat'))}</label><input name="vat_number" value="${esc(store.vat_number || '')}" maxlength="40"></div>
+          </div>
+          <div class="form-row">
+            <div><label>${esc(t('kyc_iban'))}</label><input name="iban" value="${esc(store.iban || '')}" maxlength="40"></div>
+            <div><label>${esc(t('kyc_phone'))}</label><input name="phone" value="${esc(store.phone || '')}" maxlength="40"></div>
+          </div>
+          <button class="btn btn-brand" type="submit" style="margin-top:10px">${esc(t('save'))}</button>
+        </form>
+      </div>
       ${store.status === 'active' ? `
       <div class="auth-card" style="max-width:none;margin:18px 0 0">
         <h3>\u{1F3EA} ${esc(t('sp_my_site'))}</h3>
@@ -515,11 +531,19 @@ const pages = {
           : s.status === 'pending' ? `<span class="badge warn">${esc(t('b_pending'))}</span>`
           : `<span class="badge off">${esc(t('b_suspended'))}</span>`;
         const actions = `${s.status !== 'active' ? `<form action="/admin/stores/${s.id}/approve" method="post"><button class="link-ok" type="submit">${esc(t('act_approve'))}</button></form>` : ''}${s.status === 'active' ? `<form action="/admin/stores/${s.id}/suspend" method="post"><button class="link-danger" type="submit">${esc(t('act_suspend'))}</button></form>` : ''}`;
+        const kycDone = !!((s.company_name || '').trim() && (s.kbo || '').trim() && (s.iban || '').trim());
+        const kycBadge = kycDone ? `<span class="badge ok">${esc(t('kyc_ok'))}</span>` : `<span class="badge warn">${esc(t('kyc_missing'))}</span>`;
+        const kycDetails = `<details class="kyc-details"><summary class="muted small">${esc(t('kyc_title'))}</summary>
+          <div class="muted small" style="padding:4px 0">
+            ${esc(t('kyc_company'))}: ${esc(s.company_name || '-')}<br>
+            ${esc(t('kyc_kbo'))}: ${esc(s.kbo || '-')} · ${esc(t('kyc_vat'))}: ${esc(s.vat_number || '-')}<br>
+            IBAN: ${esc(s.iban || '-')} · ${esc(t('kyc_phone'))}: ${esc(s.phone || '-')}
+          </div></details>`;
         return `<tr>
-          <td><strong>${esc(s.name)}</strong><br><span class="muted small">/store/${esc(s.slug)}</span></td>
+          <td><strong>${esc(s.name)}</strong><br><span class="muted small">/store/${esc(s.slug)}</span>${kycDetails}</td>
           <td class="small">${esc(s.owner_email)}</td>
           <td>${s.product_count}</td>
-          <td>${badge}</td>
+          <td>${badge}<br>${kycBadge}</td>
           <td class="actions">${actions}</td></tr>`;
       }).join('');
       storeBox = `
