@@ -792,6 +792,49 @@ add('POST', '/admin/returns/:id/reject', (ctx) => {
   ctx.redirect('/admin/returns');
 });
 
+// --- Admin siparis yonetimi (support yetkisi) ---
+add('GET', '/admin/orders', (ctx) => {
+  if (!requirePerm(ctx, 'support')) return;
+  const status = ['odendi', 'pending', 'iptal'].includes(ctx.query.status) ? ctx.query.status : '';
+  const q = (ctx.query.q || '').trim();
+  let sql = `SELECT o.*, u.email AS buyer_email, u.name AS buyer_name,
+      (SELECT COUNT(*) FROM seller_orders so WHERE so.order_id=o.id) AS seller_count
+    FROM orders o JOIN users u ON u.id=o.buyer_id WHERE 1=1`;
+  const args = [];
+  if (status) { sql += ' AND o.status=?'; args.push(status); }
+  if (q) { sql += ' AND (u.email LIKE ? OR u.name LIKE ? OR o.id=?)'; args.push('%' + q + '%', '%' + q + '%', /^\d+$/.test(q) ? Number(q) : -1); }
+  sql += ' ORDER BY o.created_at DESC LIMIT 200';
+  const orders = db.prepare(sql).all(...args);
+  const counts = {
+    all: db.prepare('SELECT COUNT(*) AS n FROM orders').get().n,
+    odendi: db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status='odendi'").get().n,
+    pending: db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status='pending'").get().n,
+    iptal: db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status='iptal'").get().n,
+  };
+  ctx.title = 'Siparisler';
+  ctx.send(pages.adminOrders(ctx, { orders, status, q, counts }));
+});
+
+// Siparisleri CSV olarak indir (muhasebe). Excel icin UTF-8 BOM.
+add('GET', '/admin/orders.csv', (ctx) => {
+  if (!requirePerm(ctx, 'support')) return;
+  const rows = db.prepare(`SELECT o.id, o.created_at, o.status, o.payment_method, o.payment_ref,
+      o.total_cents, o.discount_cents, o.currency, u.email, u.name
+    FROM orders o JOIN users u ON u.id=o.buyer_id ORDER BY o.created_at DESC LIMIT 5000`).all();
+  const cell = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const lines = [['id', 'datum', 'status', 'betaalmethode', 'referentie', 'totaal', 'korting', 'valuta', 'email', 'naam'].join(',')];
+  rows.forEach(r => lines.push([
+    r.id, (r.created_at || '').slice(0, 16), r.status, r.payment_method, r.payment_ref,
+    (r.total_cents / 100).toFixed(2), ((r.discount_cents || 0) / 100).toFixed(2), r.currency, r.email, r.name,
+  ].map(cell).join(',')));
+  const csv = '﻿' + lines.join('\r\n');
+  ctx.res.writeHead(200, Object.assign({
+    'Content-Type': 'text/csv; charset=utf-8',
+    'Content-Disposition': 'attachment; filename="mooz-bestellingen.csv"',
+  }, SEC_HEADERS));
+  ctx.res.end(csv);
+});
+
 add('POST', '/admin/staff/:id/delete', (ctx) => {
   if (!requirePerm(ctx, 'staff')) return;
   const target = db.prepare("SELECT id,email FROM users WHERE id=? AND role='admin'").get(ctx.params.id);
