@@ -5,9 +5,16 @@
 
 const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
+const fs = require('fs');
 const { hashPassword } = require('./helpers');
 
-const db = new DatabaseSync(path.join(__dirname, 'mooz.db'));
+// Veritabani konumu: DB_PATH env verilirse oraya (kalici disk icin, orn.
+// /var/data/mooz.db), yoksa uygulama klasorune. Boylece Render'da kalici disk
+// eklenince TEK env degiskeniyle veritabani kalici olur, kod degismez.
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'mooz.db');
+try { fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); } catch (_) { /* yoksay */ }
+const db = new DatabaseSync(DB_PATH);
+console.log('[DB] ' + DB_PATH);
 
 // --- Sema ----------------------------------------------------------------
 db.exec(`
