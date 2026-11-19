@@ -682,12 +682,8 @@ add('POST', '/admin/payments/:provider/toggle', (ctx) => {
     return ctx.redirect('/admin/payments');
   }
   if (turningOn) {
-    // AB saglayicilarindan (mollie/stripe) ayni anda sadece biri aktif olabilir
-    const euPair = ['mollie', 'stripe'];
-    if (euPair.includes(p)) {
-      const other = euPair.find(x => x !== p);
-      db.prepare('UPDATE payment_providers SET active=0 WHERE provider=?').run(other);
-    }
+    // Birden fazla saglayici ayni anda aktif olabilir; 2+ aktifse musteri
+    // checkout'ta hangisiyle odeyecegini secer.
     db.prepare('UPDATE payment_providers SET active=1 WHERE provider=?').run(p);
     ctx.flashMsg(ctx.t('fl_pay_activated') + ' ' + payment.PROVIDERS[p].label);
   } else {
@@ -927,8 +923,10 @@ add('GET', '/checkout', (ctx) => {
   if (!requireLogin(ctx)) return;
   const rows = cartRows(ctx.user.id);
   if (!rows.length) { ctx.flashMsg(ctx.t('fl_cart_empty')); return ctx.redirect('/cart'); }
+  // 2+ aktif saglayici varsa musteri checkout'ta secer
+  const providers = payment.activeProvidersFor(rows[0].currency);
   ctx.title = 'Odeme';
-  ctx.send(pages.checkout(ctx, { rows, coupon: getCoupon(ctx.couponCode) }));
+  ctx.send(pages.checkout(ctx, { rows, coupon: getCoupon(ctx.couponCode), providers }));
 });
 
 // Siparisi "rezerve et": satici siparisleri + kalemler olustur, stok dus,
@@ -1046,7 +1044,15 @@ add('POST', '/checkout', async (ctx) => {
   const orderTotal = Math.round(grossTotal * (100 - percent) / 100);
   const discountCents = grossTotal - orderTotal;
 
-  const prov = payment.activeFor(orderCurrency);
+  // Aktif saglayicilar: 0 -> simulasyon, 1 -> direkt, 2+ -> musteri secer
+  const providers = payment.activeProvidersFor(orderCurrency);
+  let prov = null;
+  if (providers.length === 1) {
+    prov = providers[0];
+  } else if (providers.length > 1) {
+    prov = providers.find(c => c.provider === ctx.body.provider) || null;
+    if (!prov) { ctx.flashMsg(ctx.t('fl_pay_choose')); return ctx.redirect('/checkout'); }
+  }
 
   // --- SIMULASYON (aktif saglayici yok) ---
   if (!prov) {
