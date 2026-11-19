@@ -673,6 +673,7 @@ const pages = {
         <a class="btn btn-light" href="/admin">&larr; ${esc(t('st_back'))}</a></div>
       <div class="notice warn">${esc(t('pay_note'))}</div>
       <p class="muted small">${esc(t('pay_secret_note'))}</p>
+      <p class="muted small">${esc(t('pay_multi_note'))}</p>
       <div class="pay-grid">${cards}</div>`);
   },
 
@@ -849,8 +850,13 @@ const pages = {
       </div>`);
   },
 
-  checkout(ctx, { rows, coupon }) {
+  checkout(ctx, { rows, coupon, providers }) {
     const t = ctx.t;
+    const provChoice = (providers && providers.length >= 2) ? `
+      <label>${esc(t('pay_provider'))}</label>
+      <div class="radio-row">
+        ${providers.map((c, i) => `<label class="radio"><input type="radio" name="provider" value="${esc(c.provider)}"${i === 0 ? ' checked' : ''}> ${esc(payment.PROVIDERS[c.provider] ? payment.PROVIDERS[c.provider].label : c.provider)}</label>`).join('')}
+      </div>` : '';
     const byStore = {};
     rows.forEach(r => { (byStore[r.store_id] = byStore[r.store_id] || { name: r.store_name, items: [] }).items.push(r); });
     const summary = Object.keys(byStore).map(sid => {
@@ -872,6 +878,7 @@ const pages = {
           </div>
           <label>${esc(t('f_country'))}</label>
           <select name="country"><option>Belcika</option><option>Hollanda</option><option>Turkiye</option></select>
+          ${provChoice}
           <label>${esc(t('pay_method'))}</label>
           <div class="radio-row">
             ${Object.keys(payment.METHODS).map((m, i) => `<label class="radio"><input type="radio" name="method" value="${m}"${i === 0 ? ' checked' : ''}> ${esc(payment.METHODS[m])}</label>`).join('')}
