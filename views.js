@@ -248,6 +248,18 @@ const pages = {
   product(ctx, { p, agg, reviews, myReview, images }) {
     const t = ctx.t;
     const avg = agg ? agg.avg : 0, count = agg ? agg.n : 0;
+    const canMod = ctx.user && ctx.user.role === 'admin' && ctx.hasPerm && ctx.hasPerm('support');
+
+    // SEO: urun yapisal verisi (JSON-LD) -> Google zengin sonuc
+    const ld = {
+      '@context': 'https://schema.org', '@type': 'Product',
+      name: p.name,
+      description: (p.description || p.name).replace(/\s+/g, ' ').trim().slice(0, 300),
+      offers: { '@type': 'Offer', price: (p.price_cents / 100).toFixed(2), priceCurrency: p.currency, availability: p.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' },
+    };
+    if (images && images.length) ld.image = images;
+    if (count > 0) ld.aggregateRating = { '@type': 'AggregateRating', ratingValue: Number(avg).toFixed(1), reviewCount: count };
+    const ldScript = `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>`;
 
     // Yorum listesi
     const reviewList = (reviews && reviews.length)
@@ -257,6 +269,7 @@ const pages = {
               <span class="rv-name">${esc(r.user_name)}</span>
               ${stars(ctx, r.rating)}
               <span class="muted small">${esc((r.created_at || '').slice(0, 10))}</span>
+              ${canMod ? `<form action="/admin/reviews/${r.id}/delete" method="post" style="margin-left:auto" onsubmit="return confirm('${esc(t('rv_confirm_del'))}')"><input type="hidden" name="product_id" value="${p.id}"><button class="link-danger" type="submit">${esc(t('rv_delete'))}</button></form>` : ''}
             </div>
             ${r.comment ? `<p class="rv-text">${esc(r.comment)}</p>` : ''}
           </div>`).join('')
@@ -279,7 +292,7 @@ const pages = {
         </form>`;
     }
 
-    return layout(ctx, `
+    return layout(ctx, `${ldScript}
       <a class="back" href="/">&larr; ${esc(t('back_store'))}</a>
       <div class="product-detail">
         ${(images && images.length > 1) ? `<div class="pd-gallery">
@@ -932,6 +945,7 @@ const pages = {
           <div class="radio-row">
             ${Object.keys(payment.METHODS).map((m, i) => `<label class="radio"><input type="radio" name="method" value="${m}"${i === 0 ? ' checked' : ''}> ${esc(payment.METHODS[m])}</label>`).join('')}
           </div>
+          <label class="radio terms-check"><input type="checkbox" name="terms" value="1" required> ${esc(t('co_terms_pre'))} <a href="/legal/terms" target="_blank">${esc(t('lg_terms'))}</a> ${esc(t('co_terms_post'))}</label>
           <button class="btn btn-brand big" type="submit">${esc(t('confirm_order'))}</button>
           <p class="muted small" style="margin-top:8px">${esc(t('sim_note'))}</p>
         </form>
