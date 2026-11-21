@@ -245,7 +245,7 @@ const pages = {
       ${grid}`);
   },
 
-  product(ctx, { p, agg, reviews, myReview }) {
+  product(ctx, { p, agg, reviews, myReview, images }) {
     const t = ctx.t;
     const avg = agg ? agg.avg : 0, count = agg ? agg.n : 0;
 
@@ -282,7 +282,13 @@ const pages = {
     return layout(ctx, `
       <a class="back" href="/">&larr; ${esc(t('back_store'))}</a>
       <div class="product-detail">
-        <div class="pd-thumb">${thumb(p)}</div>
+        ${(images && images.length > 1) ? `<div class="pd-gallery">
+          <div class="pd-thumb"><img id="pdMain" class="pimg" src="${esc(images[0])}" alt="${esc(p.name)}"></div>
+          <div class="pd-thumbs">
+            ${images.map((u, i) => `<button type="button" class="pd-tn${i === 0 ? ' active' : ''}" onclick="moozPdPick(this,'${esc(u).replace(/'/g, '&#39;')}')"><img src="${esc(u)}" alt=""></button>`).join('')}
+          </div>
+          <script>function moozPdPick(btn,u){var m=document.getElementById('pdMain');if(m)m.src=u;document.querySelectorAll('.pd-tn').forEach(function(b){b.classList.remove('active')});btn.classList.add('active');}</script>
+        </div>` : `<div class="pd-thumb">${thumb(p)}</div>`}
         <div class="pd-info">
           ${p.cat_name ? `<span class="chip">${esc(p.cat_name)}</span>` : ''}
           <h1>${esc(p.name)}</h1>
@@ -503,9 +509,11 @@ const pages = {
             <div><label>Para birimi</label><select name="currency"><option value="EUR">EUR (&euro;)</option><option value="TRY">TRY (&#8378;)</option></select></div>
             <div><label>Stok</label><input type="number" name="stock" value="1" min="0"></div>
           </div>
-          <label>Gorsel - bilgisayardan foto yukle (istege bagli)</label>
+          <label>Gorseller - bilgisayardan foto yukle (ilki ana gorsel, 3 adete kadar)</label>
           <input type="file" name="image_file" accept="image/png,image/jpeg,image/webp,image/gif">
-          <p class="muted small" style="margin:4px 0 0">PNG/JPG/WEBP, en fazla ~3 MB. Foto yuklersen o kullanilir.</p>
+          <input type="file" name="image_file2" accept="image/png,image/jpeg,image/webp,image/gif" style="margin-top:6px">
+          <input type="file" name="image_file3" accept="image/png,image/jpeg,image/webp,image/gif" style="margin-top:6px">
+          <p class="muted small" style="margin:4px 0 0">PNG/JPG/WEBP, her biri ~3 MB. Birden fazla foto yukleyebilirsin; ilki urun kartinda gorunur.</p>
           <label>veya Gorsel linki (URL)</label>
           <input type="url" name="image_url" placeholder="https://.../resim.jpg">
           <p class="muted small" style="margin:4px 0 0">Ne foto ne link verirsen asagidaki emoji kullanilir.</p>
