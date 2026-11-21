@@ -175,7 +175,100 @@ const cookies = {
     <p>You can delete or block cookies via your browser settings. Questions? ${c.email}.</p>` },
 };
 
-const DOCS = { terms, privacy, cookies };
+// --- HAKKIMIZDA / OVER ONS / ABOUT ---------------------------------------
+const about = {
+  nl: { title: 'Over ons', html: `
+    <p><strong>${brand}</strong> is een onlinemarktplaats waar elke verkoper zijn eigen winkel opent en jij koopt wat je wilt — met focus op België en Nederland.</p>
+    <h2>Wat we doen</h2>
+    <p>We brengen lokale verkopers en kopers samen op één platform: eenvoudig bestellen, veilig betalen (Mollie, Stripe) en duidelijke prijzen inclusief BTW.</p>
+    <h2>Waarom ${brand}</h2>
+    <p>Meerdere verkopers, één winkelmand. Beoordelingen en sterren, een verlanglijst, meertalig (NL/FR/EN) en een eerlijk retourbeleid van 14 dagen.</p>
+    <h2>Verkoper worden</h2>
+    <p>Open gratis je eigen winkel en begin met verkopen. <a href="/register">Meld je aan</a> als verkoper.</p>
+    <p class="muted small">${c.legalName} · ${c.postalCity}, ${c.country}</p>` },
+  fr: { title: 'À propos', html: `
+    <p><strong>${brand}</strong> est une place de marché en ligne où chaque vendeur ouvre sa propre boutique et où vous achetez ce que vous voulez — axée sur la Belgique et les Pays-Bas.</p>
+    <h2>Ce que nous faisons</h2>
+    <p>Nous réunissons vendeurs locaux et acheteurs sur une seule plateforme : commande simple, paiement sécurisé (Mollie, Stripe) et prix clairs TVA comprise.</p>
+    <h2>Pourquoi ${brand}</h2>
+    <p>Plusieurs vendeurs, un seul panier. Avis et étoiles, liste de souhaits, multilingue (NL/FR/EN) et droit de rétractation de 14 jours.</p>
+    <h2>Devenir vendeur</h2>
+    <p>Ouvrez gratuitement votre boutique et vendez. <a href="/register">Inscrivez-vous</a> comme vendeur.</p>
+    <p class="muted small">${c.legalName} · ${c.postalCity}, ${c.country}</p>` },
+  en: { title: 'About us', html: `
+    <p><strong>${brand}</strong> is an online marketplace where every seller opens their own shop and you buy what you like — focused on Belgium and the Netherlands.</p>
+    <h2>What we do</h2>
+    <p>We bring local sellers and buyers together on one platform: easy ordering, secure payment (Mollie, Stripe) and clear prices including VAT.</p>
+    <h2>Why ${brand}</h2>
+    <p>Many sellers, one cart. Reviews and stars, a wishlist, multilingual (NL/FR/EN) and a fair 14-day return policy.</p>
+    <h2>Become a seller</h2>
+    <p>Open your own shop for free and start selling. <a href="/register">Sign up</a> as a seller.</p>
+    <p class="muted small">${c.legalName} · ${c.postalCity}, ${c.country}</p>` },
+};
+
+// --- CONTACT -------------------------------------------------------------
+const contact = {
+  nl: { title: 'Contact', html: `
+    <p>Vragen over een bestelling, een retour of je verkopersaccount? We helpen je graag.</p>
+    <h2>E-mail</h2>
+    <p><a href="mailto:${c.email}">${c.email}</a></p>
+    <h2>Adres</h2>
+    <p>${c.legalName}<br>${c.address}, ${c.postalCity}<br>${c.country}</p>
+    <p class="muted small">Ondernemingsnummer ${c.kbo} · ${btwPct ? 'BTW ' + c.vat : ''}</p>` },
+  fr: { title: 'Contact', html: `
+    <p>Des questions sur une commande, un retour ou votre compte vendeur ? Nous sommes là pour vous aider.</p>
+    <h2>E-mail</h2>
+    <p><a href="mailto:${c.email}">${c.email}</a></p>
+    <h2>Adresse</h2>
+    <p>${c.legalName}<br>${c.address}, ${c.postalCity}<br>${c.country}</p>
+    <p class="muted small">Numéro d'entreprise ${c.kbo} · ${btwPct ? 'TVA ' + c.vat : ''}</p>` },
+  en: { title: 'Contact', html: `
+    <p>Questions about an order, a return or your seller account? We're happy to help.</p>
+    <h2>E-mail</h2>
+    <p><a href="mailto:${c.email}">${c.email}</a></p>
+    <h2>Address</h2>
+    <p>${c.legalName}<br>${c.address}, ${c.postalCity}<br>${c.country}</p>
+    <p class="muted small">Company number ${c.kbo} · ${btwPct ? 'VAT ' + c.vat : ''}</p>` },
+};
+
+// --- SSS / VEELGESTELDE VRAGEN / FAQ -------------------------------------
+const faq = {
+  nl: { title: 'Veelgestelde vragen', html: `
+    <h2>Hoe plaats ik een bestelling?</h2>
+    <p>Voeg producten toe aan je winkelmand en reken af. Je betaalt veilig via onze betaalpartners; de prijzen zijn inclusief BTW.</p>
+    <h2>Kan ik van meerdere verkopers tegelijk kopen?</h2>
+    <p>Ja. Je winkelmand kan producten van meerdere verkopers bevatten; de bestelling wordt automatisch per verkoper verwerkt.</p>
+    <h2>Hoe werkt retourneren?</h2>
+    <p>Je hebt 14 dagen herroepingsrecht. Vraag een retour aan vanuit je bestelling; na goedkeuring wordt het bedrag terugbetaald.</p>
+    <h2>Hoe word ik verkoper?</h2>
+    <p>Meld je aan als verkoper, vul je bedrijfsgegevens in en wacht op goedkeuring. Daarna kun je producten toevoegen.</p>
+    <h2>Hoe neem ik contact op?</h2>
+    <p>Mail naar <a href="mailto:${c.email}">${c.email}</a>.</p>` },
+  fr: { title: 'Questions fréquentes', html: `
+    <h2>Comment passer une commande ?</h2>
+    <p>Ajoutez des produits au panier et payez. Le paiement est sécurisé via nos partenaires ; les prix sont TVA comprise.</p>
+    <h2>Puis-je acheter à plusieurs vendeurs à la fois ?</h2>
+    <p>Oui. Votre panier peut contenir des produits de plusieurs vendeurs ; la commande est traitée automatiquement par vendeur.</p>
+    <h2>Comment fonctionne un retour ?</h2>
+    <p>Vous disposez de 14 jours de rétractation. Demandez un retour depuis votre commande ; après validation, vous êtes remboursé.</p>
+    <h2>Comment devenir vendeur ?</h2>
+    <p>Inscrivez-vous comme vendeur, renseignez vos informations et attendez la validation. Vous pourrez ensuite ajouter des produits.</p>
+    <h2>Comment vous contacter ?</h2>
+    <p>Écrivez à <a href="mailto:${c.email}">${c.email}</a>.</p>` },
+  en: { title: 'FAQ', html: `
+    <h2>How do I place an order?</h2>
+    <p>Add products to your cart and check out. Payment is secure via our partners; prices include VAT.</p>
+    <h2>Can I buy from several sellers at once?</h2>
+    <p>Yes. Your cart can contain products from multiple sellers; the order is processed automatically per seller.</p>
+    <h2>How do returns work?</h2>
+    <p>You have a 14-day right of withdrawal. Request a return from your order; once approved, you are refunded.</p>
+    <h2>How do I become a seller?</h2>
+    <p>Sign up as a seller, fill in your business details and wait for approval. Then you can add products.</p>
+    <h2>How do I get in touch?</h2>
+    <p>Email <a href="mailto:${c.email}">${c.email}</a>.</p>` },
+};
+
+const DOCS = { terms, privacy, cookies, about, contact, faq };
 
 // slug + dil -> { title, html }; dil yoksa NL'ye duser
 function page(slug, lang) {
