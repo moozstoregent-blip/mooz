@@ -172,6 +172,37 @@ function totalsLine(ctx, rows) {
   return money(cents, ctx.displayCur);
 }
 
+// Basit inline SVG cubuk grafik (bagimlilik yok). series: [{label, value}]
+function miniBarChart(series, color) {
+  if (!series || !series.length) return '';
+  const W = 600, H = 150, bottom = 20, top = 8;
+  const max = Math.max(1, ...series.map(d => d.value));
+  const bw = W / series.length;
+  const bars = series.map((d, i) => {
+    const h = Math.round((d.value / max) * (H - bottom - top));
+    const x = i * bw;
+    const y = H - bottom - h;
+    return `<rect x="${(x + 2).toFixed(1)}" y="${y}" width="${Math.max(1, bw - 4).toFixed(1)}" height="${h}" rx="3" fill="${color || 'var(--brand)'}"><title>${esc(d.label)}: ${esc(d.title || String(d.value))}</title></rect>`;
+  }).join('');
+  const idx = [...new Set([0, Math.floor(series.length / 2), series.length - 1])];
+  const labels = idx.map(i => {
+    const x = i * bw + bw / 2;
+    return `<text x="${x.toFixed(1)}" y="${H - 5}" font-size="10" fill="#9ca3af" text-anchor="middle">${esc(series[i].label)}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="mini-chart" role="img" aria-label="chart">${bars}${labels}</svg>`;
+}
+
+// Satis grafik karti (son 14 gun)
+function salesChartCard(ctx, series, title) {
+  if (!series || !series.length) return '';
+  const total = series.reduce((s, d) => s + d.cents, 0);
+  const data = series.map(d => ({ label: d.day.slice(5), value: d.cents, title: money(d.cents, 'EUR') }));
+  return `<div class="auth-card chart-card" style="max-width:none;margin:0 0 18px">
+    <div class="sect-h" style="margin-top:0"><h2>${esc(title)}</h2><span class="muted">${esc(ctx.t('ch_total14'))}: ${money(total, 'EUR')}</span></div>
+    ${miniBarChart(data, 'var(--brand)')}
+  </div>`;
+}
+
 const pages = {
   home(ctx, { products, activeCat, q, sort, instock, min, max }) {
     const t = ctx.t;
@@ -424,7 +455,7 @@ const pages = {
       </div>`);
   },
 
-  sellerDashboard(ctx, { store, productCount, earnings }) {
+  sellerDashboard(ctx, { store, productCount, earnings, salesChart }) {
     const t = ctx.t;
     let notice = '';
     if (!store) notice = `<p class="empty">${esc(t('sp_no_store'))}</p>`;
@@ -449,6 +480,7 @@ const pages = {
         <div class="stat"><div class="n">${money(earnings.paid, 'EUR')}</div><div class="l">${esc(t('sp_earn_paid'))}</div></div>
       </div>
       <p class="muted small">${esc(t('sp_earn_note'))}</p>` : ''}
+      ${salesChartCard(ctx, salesChart, t('ch_sales_seller'))}
       <div class="panel-links">
         <a class="btn btn-ghost" href="/seller/products">${esc(t('sp_manage_products'))}</a>
         <a class="btn btn-ghost nav-badge-wrap" href="/seller/orders">${esc(t('sp_incoming'))}${ctx.newOrders ? `<span class="nav-badge">${ctx.newOrders}</span>` : ''}</a>
@@ -538,7 +570,7 @@ const pages = {
       </div>`);
   },
 
-  adminDashboard(ctx, { stores, stats, finance }) {
+  adminDashboard(ctx, { stores, stats, finance, salesChart }) {
     const t = ctx.t;
     // Yetkiye gore bolum erisim linkleri
     const navLinks = [];
@@ -601,6 +633,7 @@ const pages = {
         <div class="stat"><div class="n">${money(stats.commission, 'EUR')}</div><div class="l">${esc(t('ad_commission'))}</div></div>
       </div>
       ${financeBox}
+      ${salesChartCard(ctx, salesChart, t('ch_sales_admin'))}
       ${storeBox}`);
   },
 
