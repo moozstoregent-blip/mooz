@@ -450,6 +450,11 @@ const D = {
   co_terms_pre: { tr: 'Siparisi vererek', nl: 'Door te bestellen ga ik akkoord met de', fr: 'En commandant, j\'accepte les', en: 'By ordering I agree to the' },
   co_terms_post: { tr: 'sartlarini kabul ediyorum', nl: '', fr: '', en: '' },
   fl_terms_required: { tr: 'Devam etmek icin sartlari kabul etmelisin.', nl: 'Je moet de voorwaarden accepteren om verder te gaan.', fr: 'Vous devez accepter les conditions pour continuer.', en: 'You must accept the terms to continue.' },
+
+  // Satis grafigi
+  ch_sales_seller: { tr: 'Satislarim (son 14 gun)', nl: 'Mijn verkoop (14 dagen)', fr: 'Mes ventes (14 jours)', en: 'My sales (14 days)' },
+  ch_sales_admin: { tr: 'Ciro (son 14 gun)', nl: 'Omzet (14 dagen)', fr: "Chiffre d'affaires (14 jours)", en: 'Revenue (14 days)' },
+  ch_total14: { tr: 'Toplam', nl: 'Totaal', fr: 'Total', en: 'Total' },
 };
 
 function t(lang, key) {
