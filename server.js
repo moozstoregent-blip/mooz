@@ -68,6 +68,10 @@ const SEC_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'X-Frame-Options': 'SAMEORIGIN',
+  // HTTPS zorla (tarayici http'de yok sayar, zararsiz). 180 gun.
+  'Strict-Transport-Security': 'max-age=15552000',
+  // Kullanilmayan tarayici ozelliklerini kapat
+  'Permissions-Policy': 'geolocation=(), camera=(), microphone=(), browsing-topics=()',
   'Content-Security-Policy':
     "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; " +
     "script-src 'self' 'unsafe-inline'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'",
@@ -97,6 +101,16 @@ const _rlTimer = setInterval(() => {
 if (_rlTimer.unref) _rlTimer.unref();
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+// Son N gunu doldur (bos gunler 0). byDay: {'YYYY-MM-DD': cents} -> [{day,cents}]
+function fillDays(byDay, days) {
+  const out = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    out.push({ day: d, cents: byDay[d] || 0 });
+  }
+  return out;
+}
 
 function buildCtx(req, res) {
   const cookies = H.parseCookies(req.headers.cookie);
@@ -234,7 +248,7 @@ function cartRows(userId) {
 // --- Vitrin ---
 add('GET', '/', (ctx) => {
   const activeCat = ctx.query.cat || '';
-  const q = (ctx.query.q || '').trim();
+  const q = (ctx.query.q || '').trim().slice(0, 100);
   ctx.activeCat = activeCat; ctx.q = q;
 
   // Magaza alt alan adindaysak: sadece o magazanin kendi vitrini
@@ -314,6 +328,7 @@ add('GET', '/product/:id', (ctx) => {
 // Yorum / puan ekle (giris yapan herkes, urun basina 1 yorum)
 add('POST', '/product/:id/review', (ctx) => {
   if (!requireLogin(ctx)) return;
+  if (!rateOk('review:' + clientIp(ctx.req), 20, 600000)) { ctx.flashMsg(ctx.t('fl_too_many')); return ctx.redirect('/product/' + ctx.params.id); }
   const prod = db.prepare('SELECT id FROM products WHERE id = ?').get(ctx.params.id);
   if (!prod) { ctx.flashMsg(ctx.t('fl_product_notfound')); return ctx.redirect('/'); }
   let rating = parseInt(ctx.body.rating, 10);
@@ -494,8 +509,17 @@ add('GET', '/seller', (ctx) => {
       FROM seller_orders so
       WHERE so.store_id=? AND so.order_id IN (SELECT id FROM orders WHERE status='odendi')`).get(store.id);
   }
+  // Son 14 gun satis grafigi
+  let salesChart = null;
+  if (store) {
+    const rows = db.prepare(`SELECT substr(o.created_at,1,10) AS day, COALESCE(SUM(so.subtotal_cents),0) AS cents
+      FROM seller_orders so JOIN orders o ON o.id=so.order_id
+      WHERE so.store_id=? AND o.status='odendi' AND o.created_at >= date('now','-13 days') GROUP BY day`).all(store.id);
+    const byDay = {}; rows.forEach(r => (byDay[r.day] = r.cents));
+    salesChart = fillDays(byDay, 14);
+  }
   ctx.title = 'Satici Paneli';
-  ctx.send(pages.sellerDashboard(ctx, { store, productCount, earnings }));
+  ctx.send(pages.sellerDashboard(ctx, { store, productCount, earnings, salesChart }));
 });
 
 add('GET', '/seller/products', (ctx) => {
@@ -592,8 +616,16 @@ add('GET', '/admin', (ctx) => {
       payout: db.prepare(`SELECT COALESCE(SUM(MAX(0,(so.subtotal_cents - so.commission_cents) - (SELECT COALESCE(SUM(refund_cents),0) FROM returns WHERE seller_order_id=so.id AND status='refunded'))),0) AS n FROM seller_orders so`).get().n,
     };
   }
+  // Son 14 gun ciro grafigi (finans yetkisi)
+  let salesChart = null;
+  if (ctx.hasPerm('finance')) {
+    const rows = db.prepare(`SELECT substr(created_at,1,10) AS day, COALESCE(SUM(total_cents),0) AS cents
+      FROM orders WHERE status='odendi' AND created_at >= date('now','-13 days') GROUP BY day`).all();
+    const byDay = {}; rows.forEach(r => (byDay[r.day] = r.cents));
+    salesChart = fillDays(byDay, 14);
+  }
   ctx.title = 'Admin';
-  ctx.send(pages.adminDashboard(ctx, { stores, stats, finance }));
+  ctx.send(pages.adminDashboard(ctx, { stores, stats, finance, salesChart }));
 });
 
 add('POST', '/admin/stores/:id/:action', (ctx) => {
@@ -843,7 +875,7 @@ add('POST', '/admin/reviews/:id/delete', (ctx) => {
 add('GET', '/admin/orders', (ctx) => {
   if (!requirePerm(ctx, 'support')) return;
   const status = ['odendi', 'pending', 'iptal'].includes(ctx.query.status) ? ctx.query.status : '';
-  const q = (ctx.query.q || '').trim();
+  const q = (ctx.query.q || '').trim().slice(0, 100);
   let sql = `SELECT o.*, u.email AS buyer_email, u.name AS buyer_name,
       (SELECT COUNT(*) FROM seller_orders so WHERE so.order_id=o.id) AS seller_count
     FROM orders o JOIN users u ON u.id=o.buyer_id WHERE 1=1`;
@@ -966,7 +998,9 @@ add('POST', '/cart/remove', (ctx) => {
 
 add('POST', '/cart/coupon', (ctx) => {
   if (!requireLogin(ctx)) return;
-  const code = String(ctx.body.code || '').trim().toUpperCase();
+  // Kupon kodu kaba kuvvetle denenmesin
+  if (!rateOk('coupon:' + clientIp(ctx.req), 15, 600000)) { ctx.flashMsg(ctx.t('fl_too_many')); return ctx.redirect('/cart'); }
+  const code = String(ctx.body.code || '').trim().toUpperCase().slice(0, 20);
   const c = getCoupon(code);
   if (!c) { ctx.flashMsg(ctx.t('fl_coupon_invalid')); ctx.setCookie('mooz_coupon=; Path=/; Max-Age=0'); }
   else { ctx.setCookie('mooz_coupon=' + encodeURIComponent(code) + '; Path=/; Max-Age=86400'); ctx.flashMsg(ctx.t('fl_coupon_applied') + ' %' + c.percent + ' ' + ctx.t('cp_off')); }
@@ -1110,6 +1144,7 @@ add('POST', '/checkout', async (ctx) => {
   if (!requireLogin(ctx)) return;
   const rows = cartRows(ctx.user.id);
   if (!rows.length) { ctx.flashMsg(ctx.t('fl_cart_empty')); return ctx.redirect('/cart'); }
+  if (!rateOk('checkout:' + clientIp(ctx.req), 20, 600000)) { ctx.flashMsg(ctx.t('fl_too_many')); return ctx.redirect('/cart'); }
   if (!ctx.body.terms) { ctx.flashMsg(ctx.t('fl_terms_required')); return ctx.redirect('/checkout'); }
   const b = ctx.body;
   const address = [b.name, b.address, ((b.zip || '') + ' ' + (b.city || '')).trim(), b.country].filter(x => x && x.trim()).join(', ');
