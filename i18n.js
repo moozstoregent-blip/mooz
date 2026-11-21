@@ -440,6 +440,16 @@ const D = {
   trust_lang: { tr: 'NL / FR / EN', nl: 'NL / FR / EN', fr: 'NL / FR / EN', en: 'NL / FR / EN' },
   nav_about: { tr: 'Hakkimizda', nl: 'Over ons', fr: 'À propos', en: 'About' },
   nav_faq: { tr: 'SSS', nl: 'FAQ', fr: 'FAQ', en: 'FAQ' },
+
+  // Yorum moderasyonu
+  rv_delete: { tr: 'Sil', nl: 'Verwijderen', fr: 'Supprimer', en: 'Delete' },
+  rv_confirm_del: { tr: 'Bu yorum silinsin mi?', nl: 'Deze review verwijderen?', fr: 'Supprimer cet avis ?', en: 'Delete this review?' },
+  fl_review_deleted: { tr: 'Yorum silindi.', nl: 'Review verwijderd.', fr: 'Avis supprimé.', en: 'Review deleted.' },
+
+  // Checkout sartlar onayi
+  co_terms_pre: { tr: 'Siparisi vererek', nl: 'Door te bestellen ga ik akkoord met de', fr: 'En commandant, j\'accepte les', en: 'By ordering I agree to the' },
+  co_terms_post: { tr: 'sartlarini kabul ediyorum', nl: '', fr: '', en: '' },
+  fl_terms_required: { tr: 'Devam etmek icin sartlari kabul etmelisin.', nl: 'Je moet de voorwaarden accepteren om verder te gaan.', fr: 'Vous devez accepter les conditions pour continuer.', en: 'You must accept the terms to continue.' },
 };
 
 function t(lang, key) {
