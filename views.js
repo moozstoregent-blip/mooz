@@ -80,10 +80,12 @@ ${flash ? `<div class="flash">${esc(flash)}</div>` : ''}
   ${esc(t('btw'))}: ${esc(config.company.vat)} · ${esc(t('lg_vat_incl'))}</p></div>
   <div class="muted small">
   <nav class="legal-links">
+    <a href="/about">${esc(t('nav_about'))}</a>
+    <a href="/faq">${esc(t('nav_faq'))}</a>
+    <a href="/contact">${esc(t('lg_contact'))}</a>
     <a href="/legal/terms">${esc(t('lg_terms'))}</a>
     <a href="/legal/privacy">${esc(t('lg_privacy'))}</a>
     <a href="/legal/cookies">${esc(t('lg_cookies'))}</a>
-    <a href="mailto:${esc(config.company.email)}">${esc(t('lg_contact'))}</a>
   </nav>
   ${ctx.storeSite ? `<p><a href="${esc(ctx.mainSiteUrl)}">${B.emoji} Mooz pazaryeri &rarr;</a></p>` : ''}
   <p>&copy; ${new Date().getFullYear()} ${esc(B.name)}</p></div>
