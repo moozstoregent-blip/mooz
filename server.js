@@ -879,6 +879,16 @@ add('GET', '/legal/:slug', (ctx) => {
   ctx.send(pages.legalPage(ctx, { doc }));
 });
 
+// Icerik sayfalari (temiz URL): /about /contact /faq
+['about', 'contact', 'faq'].forEach(slug => {
+  add('GET', '/' + slug, (ctx) => {
+    const doc = legal.page(slug, ctx.lang);
+    if (!doc) { ctx.title = 'Bulunamadi'; return ctx.send(pages.notFound(ctx), 404); }
+    ctx.title = doc.title;
+    ctx.send(pages.legalPage(ctx, { doc }));
+  });
+});
+
 // --- SEO: robots.txt + sitemap.xml ---
 add('GET', '/robots.txt', (ctx) => {
   const base = baseUrl(ctx.req);
@@ -888,7 +898,7 @@ add('GET', '/robots.txt', (ctx) => {
 
 add('GET', '/sitemap.xml', (ctx) => {
   const base = baseUrl(ctx.req);
-  const urls = ['/', '/legal/terms', '/legal/privacy', '/legal/cookies'];
+  const urls = ['/', '/about', '/faq', '/contact', '/legal/terms', '/legal/privacy', '/legal/cookies'];
   db.prepare("SELECT p.id FROM products p JOIN stores s ON s.id=p.store_id AND s.status='active'").all().forEach(p => urls.push('/product/' + p.id));
   db.prepare("SELECT slug FROM stores WHERE status='active'").all().forEach(s => urls.push('/store/' + s.slug));
   const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
@@ -1049,6 +1059,29 @@ function sendRefundEmail(returnId, amountCents, currency) {
       text: 'Je retour voor bestelling #' + r.order_id + ' is goedgekeurd. Terugbetaald: ' + H.money(amountCents, currency) + '.',
     }).catch(() => {});
   } catch (e) { console.log('[MAIL] sendRefundEmail hata:', e && e.message); }
+}
+
+// Satici "kargoya verildi" yapinca aliciya bildirim maili (fire-and-forget)
+function sendShippedEmail(sellerOrderId) {
+  try {
+    const so = db.prepare(`SELECT so.order_id, so.carrier, so.tracking_no, s.name AS store_name, u.email AS buyer_email
+      FROM seller_orders so JOIN orders o ON o.id=so.order_id JOIN users u ON u.id=o.buyer_id
+      JOIN stores s ON s.id=so.store_id WHERE so.id=?`).get(sellerOrderId);
+    if (!so) return;
+    const track = so.tracking_no
+      ? '<p>' + shipping.carrierLabel(so.carrier) + ' · <b>' + H.esc(so.tracking_no) + '</b></p>'
+      : '';
+    const body =
+      '<p>Goed nieuws! Je bestelling #' + so.order_id + ' van <b>' + H.esc(so.store_name) + '</b> is verzonden.</p>' +
+      track +
+      '<p style="color:#71717a;font-size:13px">Je kunt de levering volgen bij de vervoerder.</p>';
+    mailer.send({
+      to: so.buyer_email,
+      subject: config.brand.name + ' — Bestelling #' + so.order_id + ' verzonden',
+      html: mailer.layout('Je bestelling is onderweg', body),
+      text: 'Je bestelling #' + so.order_id + ' van ' + so.store_name + ' is verzonden.' + (so.tracking_no ? ' Tracking: ' + so.tracking_no : ''),
+    }).catch(() => {});
+  } catch (e) { console.log('[MAIL] sendShippedEmail hata:', e && e.message); }
 }
 
 add('POST', '/checkout', async (ctx) => {
@@ -1250,8 +1283,9 @@ add('POST', '/seller/orders/:id/status', (ctx) => {
     if (st === 'kargoda') {
       const carrier = shipping.isValidCarrier(ctx.body.carrier) ? ctx.body.carrier : '';
       const tracking = (ctx.body.tracking_no || '').trim();
-      db.prepare('UPDATE seller_orders SET status=?, carrier=?, tracking_no=? WHERE id=? AND store_id=?')
+      const info = db.prepare('UPDATE seller_orders SET status=?, carrier=?, tracking_no=? WHERE id=? AND store_id=?')
         .run(st, carrier, tracking, ctx.params.id, ctx.myStore.id);
+      if (info.changes) sendShippedEmail(ctx.params.id);
     } else {
       db.prepare('UPDATE seller_orders SET status=? WHERE id=? AND store_id=?').run(st, ctx.params.id, ctx.myStore.id);
     }
