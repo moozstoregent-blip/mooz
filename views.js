@@ -215,7 +215,20 @@ const pages = {
     const grid = products.length
       ? `<div class="grid">${products.map(p => productCard(ctx, p, true)).join('')}</div>`
       : `<p class="empty">${esc(t('f_no_results'))} <a href="/">${esc(t('f_clear_filters'))} &rarr;</a></p>`;
+    // Ana sayfa cilasi: guven seridi + kategori kutulari (yalnizca ana vitrin)
+    const catEmoji = { moda: '\u{1F457}', elektronik: '\u{1F4F1}', ev: '\u{1F3E0}', kozmetik: '\u{1F484}', spor: '⚽', market: '\u{1F6D2}' };
+    const extras = (!q && !activeCat) ? `
+      <div class="trust-strip">
+        <div class="trust-item"><span>\u{1F3EA}</span> ${esc(t('trust_multi'))}</div>
+        <div class="trust-item"><span>\u{1F512}</span> ${esc(t('trust_pay'))}</div>
+        <div class="trust-item"><span>↩️</span> ${esc(t('trust_return'))}</div>
+        <div class="trust-item"><span>\u{1F30D}</span> ${esc(t('trust_lang'))}</div>
+      </div>
+      ${ctx.categories && ctx.categories.length ? `<div class="cat-tiles">
+        ${ctx.categories.map(c => `<a class="cat-tile" href="/?cat=${esc(c.slug)}"><span class="ct-emoji">${catEmoji[c.slug] || '\u{1F6CD}️'}</span>${esc(c.name)}</a>`).join('')}
+      </div>` : ''}` : '';
     return layout(ctx, `${hero}
+      ${extras}
       <div class="sect-h"><h2>${heading}</h2><span class="muted">${products.length} ${esc(t('n_products'))}</span></div>
       ${filterBar}
       ${grid}`);
