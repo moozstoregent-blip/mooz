@@ -296,7 +296,7 @@ add('GET', '/product/:id', (ctx) => {
     LEFT JOIN categories c ON c.id = p.category_id WHERE p.id = ?`).get(ctx.params.id);
   if (!p) { ctx.title = 'Bulunamadi'; return ctx.send(pages.notFound(ctx), 404); }
   const agg = db.prepare('SELECT COUNT(*) AS n, COALESCE(AVG(rating),0) AS avg FROM reviews WHERE product_id = ?').get(p.id);
-  const reviews = db.prepare(`SELECT r.rating, r.comment, r.created_at, u.name AS user_name
+  const reviews = db.prepare(`SELECT r.id, r.rating, r.comment, r.created_at, u.name AS user_name
     FROM reviews r JOIN users u ON u.id = r.user_id
     WHERE r.product_id = ? ORDER BY r.created_at DESC`).all(p.id);
   const myReview = ctx.user
@@ -829,6 +829,16 @@ add('POST', '/admin/returns/:id/reject', (ctx) => {
   ctx.redirect('/admin/returns');
 });
 
+// Yorum moderasyonu: admin uygunsuz yorumu siler (support yetkisi)
+add('POST', '/admin/reviews/:id/delete', (ctx) => {
+  if (!requirePerm(ctx, 'support')) return;
+  const rev = db.prepare('SELECT product_id FROM reviews WHERE id=?').get(ctx.params.id);
+  db.prepare('DELETE FROM reviews WHERE id=?').run(ctx.params.id);
+  ctx.flashMsg(ctx.t('fl_review_deleted'));
+  const pid = (ctx.body.product_id || (rev && rev.product_id) || '').toString().replace(/[^0-9]/g, '');
+  ctx.redirect(pid ? '/product/' + pid : '/');
+});
+
 // --- Admin siparis yonetimi (support yetkisi) ---
 add('GET', '/admin/orders', (ctx) => {
   if (!requirePerm(ctx, 'support')) return;
@@ -1100,6 +1110,7 @@ add('POST', '/checkout', async (ctx) => {
   if (!requireLogin(ctx)) return;
   const rows = cartRows(ctx.user.id);
   if (!rows.length) { ctx.flashMsg(ctx.t('fl_cart_empty')); return ctx.redirect('/cart'); }
+  if (!ctx.body.terms) { ctx.flashMsg(ctx.t('fl_terms_required')); return ctx.redirect('/checkout'); }
   const b = ctx.body;
   const address = [b.name, b.address, ((b.zip || '') + ' ' + (b.city || '')).trim(), b.country].filter(x => x && x.trim()).join(', ');
 
