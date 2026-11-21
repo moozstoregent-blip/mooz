@@ -432,6 +432,12 @@ const D = {
   kyc_ok: { tr: 'KYC tamam', nl: 'KYC compleet', fr: 'KYC complet', en: 'KYC complete' },
   kyc_missing: { tr: 'KYC eksik', nl: 'KYC onvolledig', fr: 'KYC incomplet', en: 'KYC incomplete' },
   fl_kyc_saved: { tr: 'Isletme bilgilerin kaydedildi.', nl: 'Je bedrijfsgegevens zijn opgeslagen.', fr: 'Vos informations sont enregistrées.', en: 'Your business details were saved.' },
+
+  // Ana sayfa guven seridi
+  trust_multi: { tr: 'Çok satıcılı pazaryeri', nl: 'Multi-verkoper marktplaats', fr: 'Place de marché multi-vendeurs', en: 'Multi-seller marketplace' },
+  trust_pay: { tr: 'Güvenli ödeme', nl: 'Veilig betalen', fr: 'Paiement sécurisé', en: 'Secure payment' },
+  trust_return: { tr: '14 gün iade hakkı', nl: '14 dagen retourrecht', fr: '14 jours de rétractation', en: '14-day returns' },
+  trust_lang: { tr: 'NL / FR / EN', nl: 'NL / FR / EN', fr: 'NL / FR / EN', en: 'NL / FR / EN' },
 };
 
 function t(lang, key) {
