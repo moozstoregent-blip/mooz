@@ -304,7 +304,11 @@ add('GET', '/product/:id', (ctx) => {
     : null;
   ctx.title = p.name;
   ctx.metaDesc = (p.description || p.name).replace(/\s+/g, ' ').trim().slice(0, 160);
-  ctx.send(pages.product(ctx, { p, agg, reviews, myReview }));
+  // Galeri gorselleri: birincil (image_url) + ek gorseller
+  const extraImgs = db.prepare('SELECT url FROM product_images WHERE product_id=? ORDER BY position, id').all(p.id).map(r => r.url);
+  const isImg = (u) => /^(https?:\/\/|data:image\/)/i.test(u || '');
+  const images = [p.image_url, ...extraImgs].filter(isImg);
+  ctx.send(pages.product(ctx, { p, agg, reviews, myReview, images }));
 });
 
 // Yorum / puan ekle (giris yapan herkes, urun basina 1 yorum)
@@ -513,15 +517,23 @@ add('POST', '/seller/products', (ctx) => {
   const b = ctx.body;
   if (!b.name || !b.price) { ctx.flashMsg(ctx.t('fl_product_req')); return ctx.redirect('/seller/products/new'); }
   const cents = Math.round(parseFloat(String(b.price).replace(',', '.')) * 100) || 0;
-  // Dosya yuklendiyse onu kullan (data URI), yoksa URL alanini kabul et
-  const uploaded = b.file_image_file || '';
-  const imageUrl = uploaded.startsWith('data:image/') ? uploaded
-    : (/^https?:\/\//i.test((b.image_url || '').trim()) ? b.image_url.trim() : '');
-  db.prepare(`INSERT INTO products (store_id,category_id,name,description,price_cents,currency,emoji,stock,image_url)
+  // Birden fazla gorsel: 3 dosya alani + 1 URL. Ilki birincil (karttaki), kalani galeri.
+  const imgs = [];
+  ['file_image_file', 'file_image_file2', 'file_image_file3'].forEach(k => {
+    if ((b[k] || '').startsWith('data:image/')) imgs.push(b[k]);
+  });
+  const urlImg = (b.image_url || '').trim();
+  if (/^https?:\/\//i.test(urlImg)) imgs.push(urlImg);
+  const imageUrl = imgs[0] || '';
+  const info = db.prepare(`INSERT INTO products (store_id,category_id,name,description,price_cents,currency,emoji,stock,image_url)
     VALUES (?,?,?,?,?,?,?,?,?)`).run(
     ctx.myStore.id, b.category_id || null, b.name, b.description || '', cents,
     config.currencies.includes(b.currency) ? b.currency : config.defaultCurrency,
     b.emoji || '\u{1F4E6}', parseInt(b.stock) || 0, imageUrl);
+  const pid = Number(info.lastInsertRowid);
+  // Ek gorselleri galeri tablosuna kaydet (birincil haric)
+  const insImg = db.prepare('INSERT INTO product_images (product_id,url,position) VALUES (?,?,?)');
+  imgs.slice(1).forEach((u, i) => insImg.run(pid, u, i + 1));
   ctx.flashMsg(ctx.t('fl_product_added'));
   ctx.redirect('/seller/products');
 });
@@ -1332,7 +1344,7 @@ const server = http.createServer((req, res) => {
     const ctype = req.headers['content-type'] || '';
     const chunks = [];
     let size = 0;
-    const limit = 4 * 1024 * 1024; // 4 MB (base64 gorsel icin)
+    const limit = 10 * 1024 * 1024; // 10 MB (birden fazla base64 gorsel icin)
     req.on('data', c => { size += c.length; if (size > limit) { req.destroy(); return; } chunks.push(c); });
     req.on('end', () => {
       const buf = Buffer.concat(chunks);
