@@ -438,6 +438,8 @@ const D = {
   trust_pay: { tr: 'Güvenli ödeme', nl: 'Veilig betalen', fr: 'Paiement sécurisé', en: 'Secure payment' },
   trust_return: { tr: '14 gün iade hakkı', nl: '14 dagen retourrecht', fr: '14 jours de rétractation', en: '14-day returns' },
   trust_lang: { tr: 'NL / FR / EN', nl: 'NL / FR / EN', fr: 'NL / FR / EN', en: 'NL / FR / EN' },
+  nav_about: { tr: 'Hakkimizda', nl: 'Over ons', fr: 'À propos', en: 'About' },
+  nav_faq: { tr: 'SSS', nl: 'FAQ', fr: 'FAQ', en: 'FAQ' },
 };
 
 function t(lang, key) {
